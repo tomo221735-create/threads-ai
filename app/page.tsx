@@ -1,0 +1,492 @@
+"use client";
+
+import { useState } from "react";
+import { supabase } from "../lib/supabase";
+
+export default function Home() {
+  const [theme, setTheme] = useState("");
+  const [target, setTarget] = useState("");
+
+  const [posts, setPosts] = useState<string[]>([]);
+  const [ideas, setIdeas] = useState<string[]>([]);
+
+  const [loading, setLoading] = useState(false);
+  const [ideasLoading, setIdeasLoading] = useState(false);
+  const [saving, setSaving] = useState<number | null>(null);
+
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const generatePosts = async () => {
+    if (!theme || !target) {
+      setError("テーマとターゲットを入力してください。");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setMessage("");
+    setPosts([]);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        setError("ログインしてください。");
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          theme,
+          target,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "生成に失敗しました");
+      }
+
+      const generatedPosts = data.result
+        .split(/\n(?=\d+[.．、])/)
+        .map((post: string) =>
+          post.replace(/^\d+[.．、]\s*/, "").trim()
+        )
+        .filter(Boolean);
+
+      setPosts(generatedPosts);
+    } catch (err) {
+      console.error(err);
+      setError("投稿の生成に失敗しました。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateIdeas = async () => {
+    if (!theme || !target) {
+      setError("テーマとターゲットを入力してください。");
+      return;
+    }
+
+    setIdeasLoading(true);
+    setError("");
+    setMessage("");
+    setIdeas([]);
+    setPosts([]);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        setError("ログインしてください。");
+        setIdeasLoading(false);
+        return;
+      }
+
+      const response = await fetch("/api/generate-ideas", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          theme,
+          target,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "投稿ネタの取得に失敗しました"
+        );
+      }
+
+      const generatedIdeas = data.result
+        .split(/\n(?=\d+[.．、])/)
+        .map((idea: string) =>
+          idea.replace(/^\d+[.．、]\s*/, "").trim()
+        )
+        .filter(Boolean);
+
+      setIdeas(generatedIdeas);
+    } catch (err) {
+      console.error(err);
+      setError("投稿ネタの取得に失敗しました。");
+    } finally {
+      setIdeasLoading(false);
+    }
+  };
+
+  const generateFromIdea = async (idea: string) => {
+    setTheme(idea);
+    setIdeas([]);
+
+    await generatePostsWithTheme(idea);
+  };
+
+  const generatePostsWithTheme = async (selectedTheme: string) => {
+    if (!selectedTheme || !target) {
+      setError("ターゲットを入力してください。");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setMessage("");
+    setPosts([]);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        setError("ログインしてください。");
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          theme: selectedTheme,
+          target,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "生成に失敗しました");
+      }
+
+      const generatedPosts = data.result
+        .split(/\n(?=\d+[.．、])/)
+        .map((post: string) =>
+          post.replace(/^\d+[.．、]\s*/, "").trim()
+        )
+        .filter(Boolean);
+
+      setPosts(generatedPosts);
+    } catch (err) {
+      console.error(err);
+      setError("投稿の生成に失敗しました。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updatePost = (index: number, value: string) => {
+    const newPosts = [...posts];
+    newPosts[index] = value;
+    setPosts(newPosts);
+  };
+
+  const savePost = async (index: number) => {
+    setSaving(index);
+    setMessage("");
+    setError("");
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError("ログインしてください。");
+      setSaving(null);
+      return;
+    }
+
+    const { error } = await supabase.from("posts").insert({
+      user_id: user.id,
+      content: posts[index],
+      status: "draft",
+    });
+
+    if (error) {
+      console.error(error);
+      setError("保存に失敗しました。");
+    } else {
+      setMessage(`投稿 ${index + 1} を保存しました！`);
+    }
+
+    setSaving(null);
+  };
+
+  return (
+    <main className="min-h-screen bg-gray-50 px-4 py-6 sm:px-6 sm:py-10">
+      <div className="mx-auto max-w-3xl">
+
+        {/* ヘッダー */}
+        <header className="mb-7">
+          <div className="mb-2 inline-flex rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
+            AI SNS ASSISTANT
+          </div>
+
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            Threads AI
+          </h1>
+
+          <p className="mt-2 text-sm leading-6 text-gray-500 sm:text-base">
+            あなたのプロフィールと最新情報から、
+            今日投稿するネタをAIが考えます。
+          </p>
+        </header>
+
+{/* Threads連携 */}
+<section className="mb-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 sm:p-6">
+  <div className="flex items-center justify-between gap-4">
+    <div>
+      <h2 className="font-bold text-gray-900">
+        Threadsアカウント
+      </h2>
+
+      <p className="mt-1 text-sm text-gray-500">
+        Threadsと連携すると、生成した投稿をThreadsへ投稿できます。
+      </p>
+    </div>
+
+    <div className="shrink-0">
+      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+        未連携
+      </span>
+    </div>
+  </div>
+
+  <button
+    onClick={() => {
+      window.location.href = "/api/threads/login";
+    }}
+    className="mt-5 w-full rounded-xl bg-black px-5 py-3.5 text-sm font-bold text-white transition active:scale-[0.98]"
+  >
+    Threadsと連携する
+  </button>
+</section>
+
+        {/* 入力カード */}
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 sm:p-7">
+
+          <div className="mb-6">
+            <h2 className="text-lg font-bold">
+              投稿設定
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-500">
+              発信したい内容と、届けたい相手を入力してください。
+            </p>
+          </div>
+
+          {/* テーマ */}
+          <div className="mb-5">
+            <label className="mb-2 block text-sm font-semibold text-gray-800">
+              発信テーマ
+            </label>
+
+            <input
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              placeholder="例：AIを使った副業"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-base outline-none transition focus:border-black focus:bg-white"
+            />
+          </div>
+
+          {/* ターゲット */}
+          <div className="mb-6">
+            <label className="mb-2 block text-sm font-semibold text-gray-800">
+              ターゲット
+            </label>
+
+            <input
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              placeholder="例：AIを使って副業を始めたい大学生"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-base outline-none transition focus:border-black focus:bg-white"
+            />
+          </div>
+
+          {/* メインボタン */}
+          <button
+            onClick={generateIdeas}
+            disabled={ideasLoading || loading}
+            className="w-full rounded-xl bg-black px-5 py-4 text-base font-bold text-white shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {ideasLoading
+              ? "🔎 今日のネタを探しています..."
+              : "🔥 今日の投稿ネタを探す"}
+          </button>
+
+          {/* 通常生成 */}
+          <button
+            onClick={generatePosts}
+            disabled={loading || ideasLoading}
+            className="mt-3 w-full rounded-xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-semibold text-gray-800 transition active:scale-[0.98] disabled:opacity-50"
+          >
+            {loading
+              ? "AIが生成中..."
+              : "テーマから直接投稿を作る"}
+          </button>
+
+          {/* エラー */}
+          {error && (
+            <div className="mt-5 rounded-xl bg-red-50 p-4 text-sm leading-6 text-red-600">
+              {error}
+            </div>
+          )}
+
+          {/* 成功メッセージ */}
+          {message && (
+            <div className="mt-5 rounded-xl bg-green-50 p-4 text-sm leading-6 text-green-700">
+              {message}
+            </div>
+          )}
+        </section>
+
+        {/* 今日のネタ */}
+        {ideas.length > 0 && (
+          <section className="mt-8">
+
+            <div className="mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🔥</span>
+
+                <h2 className="text-xl font-bold">
+                  今日使える投稿ネタ
+                </h2>
+              </div>
+
+              <p className="mt-1 text-sm text-gray-500">
+                あなたのプロフィールと最新情報からAIが選びました。
+              </p>
+            </div>
+
+            <div className="space-y-4">
+
+              {ideas.map((idea, index) => (
+                <article
+                  key={index}
+                  className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 sm:p-6"
+                >
+
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">
+                      ネタ {index + 1}
+                    </span>
+                  </div>
+
+                  <div className="whitespace-pre-wrap text-sm leading-7 text-gray-800 sm:text-base">
+                    {idea}
+                  </div>
+
+                  <button
+                    onClick={() => generateFromIdea(idea)}
+                    disabled={loading}
+                    className="mt-5 w-full rounded-xl bg-black px-4 py-3.5 text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-50"
+                  >
+                    {loading
+                      ? "投稿を作成中..."
+                      : "このネタで投稿を作る →"}
+                  </button>
+
+                </article>
+              ))}
+
+            </div>
+          </section>
+        )}
+
+        {/* 生成された投稿 */}
+        {posts.length > 0 && (
+          <section className="mt-10">
+
+            <div className="mb-4">
+              <h2 className="text-xl font-bold">
+                ✍️ 生成された投稿
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                必要なら文章を編集してから保存できます。
+              </p>
+            </div>
+
+            <div className="space-y-5">
+
+              {posts.map((post, index) => (
+                <article
+                  key={index}
+                  className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 sm:p-6"
+                >
+
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm font-bold text-gray-500">
+                      投稿 {index + 1}
+                    </span>
+
+                    <span className="text-xs text-gray-400">
+                      下書き
+                    </span>
+                  </div>
+
+                  <textarea
+                    value={post}
+                    onChange={(e) =>
+                      updatePost(index, e.target.value)
+                    }
+                    rows={7}
+                    className="w-full resize-y rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm leading-7 outline-none transition focus:border-black focus:bg-white sm:text-base"
+                  />
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+
+                    <button
+                      onClick={() => savePost(index)}
+                      disabled={saving === index}
+                      className="rounded-xl bg-black px-4 py-3 font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
+                    >
+                      {saving === index
+                        ? "保存中..."
+                        : "保存"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        navigator.clipboard.writeText(post)
+                      }
+                      className="rounded-xl border border-gray-200 bg-white px-4 py-3 font-semibold text-gray-800 transition active:scale-[0.98]"
+                    >
+                      コピー
+                    </button>
+
+                  </div>
+
+                </article>
+              ))}
+
+            </div>
+          </section>
+        )}
+
+        {/* フッター */}
+        <footer className="py-10 text-center text-xs text-gray-400">
+          Threads AI
+        </footer>
+
+      </div>
+    </main>
+  );
+}
