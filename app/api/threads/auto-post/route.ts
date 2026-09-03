@@ -257,14 +257,22 @@ ${setting.purpose ?? ""}
           publishData
         );
 
-        if (
-          !publishResponse.ok ||
-          !publishData.id
-        ) {
-          throw new Error(
-            "Threadsへの公開に失敗しました。"
-          );
-        }
+       if (
+  !publishResponse.ok ||
+  !publishData.id
+) {
+  console.error(
+    "Threads publish error:",
+    publishData
+  );
+
+  throw new Error(
+    `Threadsへの公開に失敗しました: ${
+      publishData?.error?.message ||
+      JSON.stringify(publishData)
+    }`
+  );
+}
 
         results.push({
           userId,
