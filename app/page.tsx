@@ -13,12 +13,15 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [ideasLoading, setIdeasLoading] = useState(false);
   const [saving, setSaving] = useState<number | null>(null);
+const [posting, setPosting] = useState<number | null>(null);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const [threadsUsername, setThreadsUsername] = useState<string | null>(null);
 const [threadsLoading, setThreadsLoading] = useState(true);
+
+
 
 useEffect(() => {
   const checkThreadsConnection = async () => {
@@ -249,6 +252,8 @@ useEffect(() => {
       return;
     }
 
+
+
     const { error } = await supabase.from("posts").insert({
       user_id: user.id,
       content: posts[index],
@@ -264,6 +269,52 @@ useEffect(() => {
 
     setSaving(null);
   };
+
+      const postToThreads = async (index: number) => {
+  setPosting(index);
+  setMessage("");
+  setError("");
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError("ログインしてください。");
+      return;
+    }
+
+    const response = await fetch("/api/threads/post", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        content: posts[index],
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Threadsへの投稿に失敗しました。"
+      );
+    }
+
+    setMessage(`投稿 ${index + 1} をThreadsに投稿しました！`);
+  } catch (error) {
+    console.error(error);
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Threadsへの投稿に失敗しました。"
+    );
+  } finally {
+    setPosting(null);
+  }
+};
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-6 sm:px-6 sm:py-10">
@@ -513,7 +564,7 @@ useEffect(() => {
                     className="w-full resize-y rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm leading-7 outline-none transition focus:border-black focus:bg-white sm:text-base"
                   />
 
-                  <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="mt-4 grid grid-cols-3 gap-3">
 
                     <button
                       onClick={() => savePost(index)}
@@ -533,6 +584,16 @@ useEffect(() => {
                     >
                       コピー
                     </button>
+
+                    <button
+  onClick={() => postToThreads(index)}
+  disabled={posting === index}
+  className="rounded-xl bg-black px-4 py-3 font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
+>
+  {posting === index
+    ? "投稿中..."
+    : "Threadsに投稿"}
+</button>
 
                   </div>
 
