@@ -76,33 +76,36 @@ export default function SettingsPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from("auto_post_settings")
-      .upsert(
-        {
-          user_id: user.id,
-          enabled,
-          posts_per_day: postsPerDay,
-          post_time_1: postsPerDay >= 1 ? postTime1 : null,
-          post_time_2: postsPerDay >= 2 ? postTime2 : null,
-          post_time_3: postsPerDay >= 3 ? postTime3 : null,
-          purpose,
-          auto_trend: autoTrend,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "user_id",
-        }
-      );
-
-    if (error) {
-      console.error(error);
-      setError("設定の保存に失敗しました。");
-    } else {
-      setMessage("自動投稿設定を保存しました！");
+const { error } = await supabase
+  .from("auto_post_settings")
+  .upsert(
+    {
+      user_id: user.id,
+      enabled,
+      posts_per_day: postsPerDay,
+      post_time_1: postsPerDay >= 1 ? postTime1 : null,
+      post_time_2: postsPerDay >= 2 ? postTime2 : null,
+      post_time_3: postsPerDay >= 3 ? postTime3 : null,
+      purpose,
+      auto_trend: autoTrend,
+      updated_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "user_id",
     }
+  );
 
-    setSaving(false);
+if (error) {
+  console.error("保存エラー:", error);
+
+  setError(
+    `設定の保存に失敗しました。\n${error.message}`
+  );
+} else {
+  setMessage("自動投稿設定を保存しました！");
+}
+
+setSaving(false);
   };
 
   if (loading) {
