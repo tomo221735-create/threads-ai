@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+
     const code = searchParams.get("code");
 
     if (!code) {
@@ -21,12 +22,18 @@ export async function GET(request: Request) {
 
     if (!appId || !appSecret) {
       return NextResponse.json(
-        { error: "Threadsの環境変数が設定されていません。" },
+        {
+          error:
+            "THREADS_APP_ID または THREADS_APP_SECRET が設定されていません。",
+        },
         { status: 500 }
       );
     }
 
+    // ========================================
     // ① 認証コード → 短期アクセストークン
+    // ========================================
+
     const tokenResponse = await fetch(
       "https://graph.threads.net/oauth/access_token",
       {
@@ -46,7 +53,10 @@ export async function GET(request: Request) {
 
     const tokenData = await tokenResponse.json();
 
-    console.log("Threads token response:", tokenData);
+    console.log("Threads token response:", {
+      ...tokenData,
+      access_token: tokenData.access_token ? "***" : undefined,
+    });
 
     if (!tokenResponse.ok || !tokenData.access_token) {
       return NextResponse.json(
@@ -60,28 +70,41 @@ export async function GET(request: Request) {
 
     const shortLivedToken = tokenData.access_token;
 
+    // ========================================
     // ② 長期アクセストークンへ交換
+    // ========================================
+
     const longTokenUrl = new URL(
       "https://graph.threads.net/access_token"
     );
 
-    longTokenUrl.searchParams.set("grant_type", "th_exchange_token");
-    longTokenUrl.searchParams.set("client_secret", appSecret);
-    longTokenUrl.searchParams.set("access_token", shortLivedToken);
+    longTokenUrl.searchParams.set(
+      "grant_type",
+      "th_exchange_token"
+    );
 
-    const longTokenResponse = await fetch(longTokenUrl.toString());
+    longTokenUrl.searchParams.set(
+      "client_secret",
+      appSecret
+    );
+
+    longTokenUrl.searchParams.set(
+      "access_token",
+      shortLivedToken
+    );
+
+    const longTokenResponse = await fetch(
+      longTokenUrl.toString()
+    );
 
     const longTokenData = await longTokenResponse.json();
 
-    console.log(
-      "Threads long token response:",
-      {
-        ...longTokenData,
-        access_token: longTokenData.access_token
-          ? "***"
-          : undefined,
-      }
-    );
+    console.log("Threads long token response:", {
+      ...longTokenData,
+      access_token: longTokenData.access_token
+        ? "***"
+        : undefined,
+    });
 
     if (
       !longTokenResponse.ok ||
@@ -89,7 +112,8 @@ export async function GET(request: Request) {
     ) {
       return NextResponse.json(
         {
-          error: "長期アクセストークンの取得に失敗しました。",
+          error:
+            "長期アクセストークンの取得に失敗しました。",
           details: longTokenData,
         },
         { status: 400 }
@@ -98,29 +122,41 @@ export async function GET(request: Request) {
 
     const accessToken = longTokenData.access_token;
 
-    // ③ Threadsユーザー情報を取得
+    // ========================================
+    // ③ Threadsプロフィール取得
+    // ========================================
+
     const profileResponse = await fetch(
       `https://graph.threads.net/v1.0/me?fields=id,username&access_token=${encodeURIComponent(
         accessToken
       )}`
     );
 
-    const threadsProfile = await profileResponse.json();
+    const threadsProfile =
+      await profileResponse.json();
 
     console.log("Threads profile:", threadsProfile);
 
-    if (!profileResponse.ok || !threadsProfile.id) {
+    if (
+      !profileResponse.ok ||
+      !threadsProfile.id
+    ) {
       return NextResponse.json(
         {
-          error: "Threadsプロフィールの取得に失敗しました。",
+          error:
+            "Threadsプロフィールの取得に失敗しました。",
           details: threadsProfile,
         },
         { status: 400 }
       );
     }
 
-    // ④ 現在ログインしているサービスユーザーを取得
-    const supabase = await createSupabaseServerClient();
+    // ========================================
+    // ④ Supabaseのログインユーザー取得
+    // ========================================
+
+    const supabase =
+      await createSupabaseServerClient();
 
     const {
       data: { user },
@@ -137,19 +173,29 @@ export async function GET(request: Request) {
       );
     }
 
-    // ⑤ プロフィールにThreads情報を保存
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({
-        threads_user_id: threadsProfile.id,
-        threads_username: threadsProfile.username,
-        threads_access_token: accessToken,
-        threads_token_expires_at: new Date(
-          Date.now() +
-            (longTokenData.expires_in || 5184000) * 1000
-        ).toISOString(),
-      })
-      .eq("id", user.id);
+    // ========================================
+    // ⑤ Threads情報をSupabaseへ保存
+    // ========================================
+
+    const expiresIn =
+      longTokenData.expires_in || 5184000;
+
+    const expiresAt = new Date(
+      Date.now() + expiresIn * 1000
+    ).toISOString();
+
+    const { error: updateError } =
+      await supabase
+        .from("profiles")
+        .update({
+          threads_user_id: threadsProfile.id,
+          threads_username:
+            threadsProfile.username,
+          threads_access_token: accessToken,
+          threads_token_expires_at:
+            expiresAt,
+        })
+        .eq("id", user.id);
 
     if (updateError) {
       console.error(
@@ -166,12 +212,21 @@ export async function GET(request: Request) {
       );
     }
 
-    // ⑥ 完了
+    // ========================================
+    // ⑥ 連携完了
+    // ========================================
+
     return NextResponse.redirect(
-      new URL("/?threads=connected", request.url)
+      new URL(
+        "/?threads=connected",
+        request.url
+      )
     );
   } catch (error) {
-    console.error("Threads callback error:", error);
+    console.error(
+      "Threads callback error:",
+      error
+    );
 
     return NextResponse.json(
       {
