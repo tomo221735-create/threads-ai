@@ -1,6 +1,75 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { XMLParser } from "fast-xml-parser";
+
+async function getTrendNews(
+  topic: string,
+  location: string
+) {
+  try {
+    const query = [topic, location]
+      .filter(Boolean)
+      .join(" ");
+
+    if (!query) {
+      return "";
+    }
+
+    const url =
+      "https://news.google.com/rss/search?q=" +
+      encodeURIComponent(query) +
+      "&hl=ja&gl=JP&ceid=JP:ja";
+
+    const response = await fetch(url, {
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      console.error(
+        "Google News error:",
+        response.status
+      );
+
+      return "";
+    }
+
+    const xml = await response.text();
+
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+    });
+
+    const data = parser.parse(xml);
+
+    const items =
+      data?.rss?.channel?.item ?? [];
+
+    const news = items
+      .slice(0, 8)
+      .map((item: any) => ({
+        title: item.title ?? "",
+        description: item.description ?? "",
+        pubDate: item.pubDate ?? "",
+      }))
+      .filter((item: any) => item.title);
+
+    return news
+      .map(
+        (item: any, index: number) =>
+          `${index + 1}. ${item.title}`
+      )
+      .join("\n");
+
+  } catch (error) {
+    console.error(
+      "Trend fetch error:",
+      error
+    );
+
+    return "";
+  }
+}
 
 export async function GET(request: Request) {
   try {
@@ -187,6 +256,24 @@ export async function GET(request: Request) {
         }
 
         // =========================
+// トレンド情報取得
+// =========================
+
+let trendNews = "";
+
+if (setting.auto_trend) {
+  trendNews = await getTrendNews(
+    profile.topics ?? "",
+    profile.location ?? ""
+  );
+}
+
+console.log(
+  "Trend news:",
+  trendNews
+);
+
+        // =========================
         // AIで投稿生成
         // =========================
 
@@ -198,11 +285,20 @@ export async function GET(request: Request) {
               {
                 role: "system",
 
-                content: `
+content: `
 あなたはThreads専門のSNSマーケティングAIです。
 
-ユーザーのプロフィール、目的、発信テーマをもとに、
-今日Threadsに投稿する文章を1つ作成してください。
+ユーザーのプロフィール、目的、発信テーマ、
+そして最新のニュース・トレンドを分析して、
+今日投稿する文章を1つ作成してください。
+
+重要:
+- 最新ニュースをそのまま紹介するだけにしない
+- ユーザー本人の経験・専門性・意見と結びつける
+- 「このニュースについて自分ならどう考えるか」という視点を重視する
+- トレンドとユーザーの発信テーマに関連性がない場合、無理にトレンドを使わない
+- ニュースの内容を捏造しない
+- 知らない情報を断定しない
 
 条件:
 - 必ず500文字以内
@@ -213,7 +309,7 @@ export async function GET(request: Request) {
 - ユーザー本人が書いたようにする
 - ハッシュタグは基本的に使わない
 - 文章だけを返す
-                `,
+`,
               },
 
               {
@@ -261,6 +357,9 @@ ${setting.purpose ?? ""}
 
 【トレンドを活用する】
 ${setting.auto_trend ? "はい" : "いいえ"}
+
+【最新のトレンド・ニュース】
+${trendNews || "現在取得できるトレンド情報はありません。"}
                 `,
               },
             ],
