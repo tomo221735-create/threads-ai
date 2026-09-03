@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
@@ -16,6 +16,42 @@ export default function Home() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const [threadsUsername, setThreadsUsername] = useState<string | null>(null);
+const [threadsLoading, setThreadsLoading] = useState(true);
+
+useEffect(() => {
+  const checkThreadsConnection = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setThreadsLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("threads_username")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error(error);
+      } else {
+        setThreadsUsername(data?.threads_username ?? null);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setThreadsLoading(false);
+    }
+  };
+
+  checkThreadsConnection();
+}, []);
 
   const generatePosts = async () => {
     if (!theme || !target) {
@@ -258,25 +294,51 @@ export default function Home() {
       </h2>
 
       <p className="mt-1 text-sm text-gray-500">
-        Threadsと連携すると、生成した投稿をThreadsへ投稿できます。
+        生成した投稿をThreadsへ投稿できます。
       </p>
     </div>
 
     <div className="shrink-0">
-      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
-        未連携
-      </span>
+      {threadsLoading ? (
+        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-500">
+          確認中...
+        </span>
+      ) : threadsUsername ? (
+        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+          ✓ 連携済み
+        </span>
+      ) : (
+        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+          未連携
+        </span>
+      )}
     </div>
   </div>
 
-  <button
-    onClick={() => {
-      window.location.href = "/api/threads/login";
-    }}
-    className="mt-5 w-full rounded-xl bg-black px-5 py-3.5 text-sm font-bold text-white transition active:scale-[0.98]"
-  >
-    Threadsと連携する
-  </button>
+  {threadsLoading ? (
+    <div className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+      Threads連携状況を確認しています...
+    </div>
+  ) : threadsUsername ? (
+    <div className="mt-5 rounded-xl bg-green-50 p-4">
+      <p className="text-sm font-semibold text-green-700">
+        ✓ Threadsアカウントと連携されています
+      </p>
+
+      <p className="mt-1 text-sm text-green-600">
+        @{threadsUsername}
+      </p>
+    </div>
+  ) : (
+    <button
+      onClick={() => {
+        window.location.href = "/api/threads/login";
+      }}
+      className="mt-5 w-full rounded-xl bg-black px-5 py-3.5 text-sm font-bold text-white transition active:scale-[0.98]"
+    >
+      Threadsと連携する
+    </button>
+  )}
 </section>
 
         {/* 入力カード */}
