@@ -13,14 +13,15 @@ export async function GET() {
   const redirectUri =
     "https://threads-ai-six.vercel.app/api/threads/callback";
 
-  const scopes = "threads_basic,threads_content_publish";
+  const authUrl = new URL("https://threads.net/oauth/authorize");
 
-  const authUrl =
-    `https://threads.net/oauth/authorize` +
-    `?client_id=${encodeURIComponent(appId)}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&scope=${encodeURIComponent(scopes)}` +
-    `&response_type=code`;
+  authUrl.searchParams.set("client_id", appId);
+  authUrl.searchParams.set("redirect_uri", redirectUri);
+  authUrl.searchParams.set(
+    "scope",
+    "threads_basic,threads_content_publish"
+  );
+  authUrl.searchParams.set("response_type", "code");
 
-  return NextResponse.redirect(authUrl);
+  return NextResponse.redirect(authUrl.toString());
 }
