@@ -1,21 +1,17 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const supabase = await createSupabaseServerClient();
+    const { searchParams } = new URL(request.url);
 
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
+    const userId = searchParams.get("userId");
 
-    if (error || !user) {
+    if (!userId) {
       return NextResponse.json(
         {
-          error: "先にサービスへログインしてください。",
+          error: "ユーザー情報がありません。",
         },
-        { status: 401 }
+        { status: 400 }
       );
     }
 
@@ -36,10 +32,9 @@ export async function GET() {
     const scopes =
       "threads_basic,threads_content_publish";
 
-    // 現在のSupabaseユーザーをcallbackへ渡す
     const state = Buffer.from(
       JSON.stringify({
-        userId: user.id,
+        userId,
       })
     ).toString("base64url");
 

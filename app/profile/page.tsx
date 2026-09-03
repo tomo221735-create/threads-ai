@@ -192,6 +192,27 @@ if (error) {
             {saving ? "保存中..." : "プロフィールを保存"}
           </button>
 
+          <button
+  onClick={async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const user = session?.user;
+
+    if (!user) {
+      setMessage("ログインしてください。");
+      return;
+    }
+
+    window.location.href =
+      `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
+  }}
+  className="rounded-lg bg-black px-6 py-3 font-semibold text-white"
+>
+  Threadsアカウントを連携する
+</button>
+
           {message && (
             <p className="text-green-600">
               {message}
