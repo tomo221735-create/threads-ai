@@ -381,10 +381,20 @@ useEffect(() => {
       </p>
     </div>
   ) : (
-    <button
-      onClick={() => {
-        window.location.href = "/api/threads/login";
-      }}
+<button
+  onClick={async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError("ログインしてください。");
+      return;
+    }
+
+    window.location.href =
+      `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
+  }}
       className="mt-5 w-full rounded-xl bg-black px-5 py-3.5 text-sm font-bold text-white transition active:scale-[0.98]"
     >
       Threadsと連携する
