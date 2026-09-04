@@ -38,8 +38,8 @@ export async function GET(request: Request) {
     const appSecret = process.env.THREADS_APP_SECRET;
 
     const redirectUri =
-      "https://threads-ai-six.vercel.app/api/threads/callback";
-
+  `${process.env.NEXT_PUBLIC_APP_URL}/api/threads/callback`;
+  
     if (!appId || !appSecret) {
       return NextResponse.json(
         { error: "Threadsの環境変数が設定されていません。" },
