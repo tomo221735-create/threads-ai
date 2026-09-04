@@ -8,21 +8,13 @@ export async function GET(request: Request) {
     const code = searchParams.get("code");
     const state = searchParams.get("state");
 
-    if (!code) {
+    if (!code || !state) {
       return NextResponse.json(
-        { error: "認証コードがありません。" },
+        { error: "認証情報がありません。" },
         { status: 400 }
       );
     }
 
-    if (!state) {
-      return NextResponse.json(
-        { error: "stateがありません。" },
-        { status: 400 }
-      );
-    }
-
-    // stateからユーザーIDを復元
     let userId: string;
 
     try {
@@ -50,18 +42,12 @@ export async function GET(request: Request) {
 
     if (!appId || !appSecret) {
       return NextResponse.json(
-        {
-          error:
-            "Threadsの環境変数が設定されていません。",
-        },
+        { error: "Threadsの環境変数が設定されていません。" },
         { status: 500 }
       );
     }
 
-    // -----------------------------
-    // ① code → 短期アクセストークン
-    // -----------------------------
-
+    // ① 認証コード → アクセストークン
     const tokenResponse = await fetch(
       "https://graph.threads.net/oauth/access_token",
       {
@@ -82,14 +68,8 @@ export async function GET(request: Request) {
 
     const tokenData = await tokenResponse.json();
 
-    if (
-      !tokenResponse.ok ||
-      !tokenData.access_token
-    ) {
-      console.error(
-        "Threads token error:",
-        tokenData
-      );
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      console.error("Threads token error:", tokenData);
 
       return NextResponse.json(
         {
@@ -100,69 +80,12 @@ export async function GET(request: Request) {
       );
     }
 
-    const shortLivedToken =
-      tokenData.access_token;
+    // 今回は長期トークン交換をしない
+    const accessToken = tokenData.access_token;
 
-    // -----------------------------
-    // ② 長期アクセストークン
-    // -----------------------------
+    console.log("Short-lived Threads token obtained.");
 
-    console.log("Long token exchange starting");
-console.log("Short token exists:", !!shortLivedToken);
-console.log("App secret exists:", !!appSecret);
-
-    const longTokenUrl = new URL(
-      "https://graph.threads.net/access_token"
-    );
-
-    longTokenUrl.searchParams.set(
-      "grant_type",
-      "th_exchange_token"
-    );
-
-    longTokenUrl.searchParams.set(
-      "client_secret",
-      appSecret
-    );
-
-    longTokenUrl.searchParams.set(
-      "access_token",
-      shortLivedToken
-    );
-
-    const longTokenResponse = await fetch(
-      longTokenUrl.toString()
-    );
-
-    const longTokenData =
-      await longTokenResponse.json();
-
-    if (
-      !longTokenResponse.ok ||
-      !longTokenData.access_token
-    ) {
-     console.error("Threads long token error:", {
-  status: longTokenResponse.status,
-  statusText: longTokenResponse.statusText,
-  data: longTokenData,
-});
-
-      return NextResponse.json(
-        {
-          error:
-            "長期アクセストークンの取得に失敗しました。",
-        },
-        { status: 400 }
-      );
-    }
-
-    const accessToken =
-      longTokenData.access_token;
-
-    // -----------------------------
-    // ③ Threadsプロフィール取得
-    // -----------------------------
-
+    // ② Threadsプロフィール取得
     const profileResponse = await fetch(
       `https://graph.threads.net/v1.0/me?fields=id,username&access_token=${encodeURIComponent(
         accessToken
@@ -190,20 +113,20 @@ console.log("App secret exists:", !!appSecret);
       );
     }
 
-    // -----------------------------
-    // ④ Supabaseへ保存
-    // -----------------------------
+    console.log(
+      "Threads profile:",
+      threadsProfile.username
+    );
 
+    // ③ Supabaseへ保存
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const expiresIn =
-      longTokenData.expires_in || 5184000;
-
+    // 短期トークンなので短めの有効期限を設定
     const expiresAt = new Date(
-      Date.now() + expiresIn * 1000
+      Date.now() + 3600 * 1000
     ).toISOString();
 
     const { error: updateError } =
@@ -236,10 +159,7 @@ console.log("App secret exists:", !!appSecret);
       );
     }
 
-    // -----------------------------
-    // ⑤ 完了
-    // -----------------------------
-
+    // ④ 完了
     return NextResponse.redirect(
       new URL(
         "/?threads=connected",
