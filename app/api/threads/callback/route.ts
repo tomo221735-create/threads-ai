@@ -107,6 +107,10 @@ export async function GET(request: Request) {
     // ② 長期アクセストークン
     // -----------------------------
 
+    console.log("Long token exchange starting");
+console.log("Short token exists:", !!shortLivedToken);
+console.log("App secret exists:", !!appSecret);
+
     const longTokenUrl = new URL(
       "https://graph.threads.net/access_token"
     );
@@ -137,10 +141,11 @@ export async function GET(request: Request) {
       !longTokenResponse.ok ||
       !longTokenData.access_token
     ) {
-      console.error(
-        "Threads long token error:",
-        longTokenData
-      );
+     console.error("Threads long token error:", {
+  status: longTokenResponse.status,
+  statusText: longTokenResponse.statusText,
+  data: longTokenData,
+});
 
       return NextResponse.json(
         {
