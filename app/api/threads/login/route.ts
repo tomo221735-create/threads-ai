@@ -26,8 +26,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const redirectUri =
-      "https://threads-ai-six.vercel.app/api/threads/callback";
+const redirectUri = "https://threads-ai-six.vercel.app/api/threads/callback";
 
     const scopes =
       "threads_basic,threads_content_publish";

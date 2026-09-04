@@ -37,8 +37,7 @@ export async function GET(request: Request) {
     const appId = process.env.THREADS_APP_ID;
     const appSecret = process.env.THREADS_APP_SECRET;
 
-    const redirectUri =
-  `${process.env.NEXT_PUBLIC_APP_URL}/api/threads/callback`;
+  const redirectUri = "https://threads-ai-six.vercel.app/api/threads/callback";
   
     if (!appId || !appSecret) {
       return NextResponse.json(
