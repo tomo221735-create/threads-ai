@@ -419,15 +419,24 @@ ${trendNews || "現在取得できるトレンド情報はありません。"}
           containerData
         );
 
-        if (
-          !containerResponse.ok ||
-          !containerData.id
-        ) {
-          throw new Error(
-            "Threads投稿コンテナの作成に失敗しました。"
-          );
-        }
+if (
+  !containerResponse.ok ||
+  !containerData.id
+) {
+  console.error(
+    "Threads container API error:",
+    {
+      status: containerResponse.status,
+      data: containerData,
+    }
+  );
 
+  throw new Error(
+    containerData?.error?.message ||
+      containerData?.message ||
+      `Threads投稿コンテナの作成に失敗しました。HTTP ${containerResponse.status}`
+  );
+}
         // =========================
         // Threads公開
         // =========================
@@ -461,14 +470,24 @@ ${trendNews || "現在取得できるトレンド情報はありません。"}
           publishData
         );
 
-        if (
-          !publishResponse.ok ||
-          !publishData.id
-        ) {
-          throw new Error(
-            "Threadsへの公開に失敗しました。"
-          );
-        }
+if (
+  !publishResponse.ok ||
+  !publishData.id
+) {
+  console.error(
+    "Threads publish API error:",
+    {
+      status: publishResponse.status,
+      data: publishData,
+    }
+  );
+
+  throw new Error(
+    publishData?.error?.message ||
+      publishData?.message ||
+      `Threadsへの公開に失敗しました。HTTP ${publishResponse.status}`
+  );
+}
 
         // =========================
         // 成功ログ
