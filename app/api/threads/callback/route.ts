@@ -117,54 +117,36 @@ export async function GET(request: Request) {
       threadsProfile.username
     );
 
-    // ③ Supabaseへ保存
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+// ③ Supabaseへ保存（UPSERT：存在しなければ作成、存在すれば更新）
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-    console.log("userId:", userId);
-console.log("threadsProfile:", threadsProfile);
+const expiresAt = new Date(
+  Date.now() + 3600 * 1000
+).toISOString();
 
-    // 短期トークンなので短めの有効期限を設定
-    const expiresAt = new Date(
-      Date.now() + 3600 * 1000
-    ).toISOString();
+const { error: upsertError } = await supabase
+  .from("profiles")
+  .upsert({
+    id: userId,  // ← PRIMARY KEY を含める
+    threads_user_id: threadsProfile.id,
+    threads_username: threadsProfile.username,
+    threads_access_token: accessToken,
+    threads_token_expires_at: expiresAt,
+  });
 
-    console.log("Attempting to update profiles...");
+if (upsertError) {
+  console.error("Supabase upsert error:", upsertError);
 
-    const { error: updateError } =
-      await supabase
-        .from("profiles")
-        .update({
-          threads_user_id:
-            threadsProfile.id,
-          threads_username:
-            threadsProfile.username,
-          threads_access_token:
-            accessToken,
-          threads_token_expires_at:
-            expiresAt,
-        })
-        .eq("id", userId);
-
-        console.log("Update result:", { updateError });
-
-    if (updateError) {
-       console.error("Supabase update error:", updateError);
-      console.error(
-        "Supabase update error:",
-        updateError
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "Threads情報の保存に失敗しました。",
-        },
-        { status: 500 }
-      );
-    }
+  return NextResponse.json(
+    {
+      error: "Threads情報の保存に失敗しました。",
+    },
+    { status: 500 }
+  );
+}
 
     // ④ 完了
     return NextResponse.redirect(
