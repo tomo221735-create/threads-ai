@@ -24,7 +24,8 @@ const [posting, setPosting] = useState<number | null>(null);
   const [threadsUsername, setThreadsUsername] = useState<string | null>(null);
 const [threadsLoading, setThreadsLoading] = useState(true);
 
-
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
 useEffect(() => {
   const checkThreadsConnection = async () => {
@@ -32,6 +33,9 @@ useEffect(() => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
+      setUserEmail(user?.email ?? null);
+      setAuthLoading(false);
 
       if (!user) {
         setThreadsLoading(false);
@@ -51,6 +55,7 @@ useEffect(() => {
       }
     } catch (error) {
       console.error(error);
+      setAuthLoading(false);
     } finally {
       setThreadsLoading(false);
     }
@@ -58,6 +63,12 @@ useEffect(() => {
 
   checkThreadsConnection();
 }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUserEmail(null);
+    setThreadsUsername(null);
+  };
 
   const generatePosts = async () => {
     if (!theme || !target) {
@@ -325,8 +336,40 @@ useEffect(() => {
 
         {/* ヘッダー */}
         <header className="mb-7">
-          <div className="mb-2 inline-flex rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
-            AI SNS ASSISTANT
+          <div className="flex items-start justify-between gap-3">
+            <div className="mb-2 inline-flex rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
+              AI SNS ASSISTANT
+            </div>
+
+            {/* ログイン／設定ボタン */}
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={() => router.push("/settings")}
+                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition active:scale-[0.98]"
+              >
+                ⚙️ 設定
+              </button>
+
+              {authLoading ? (
+                <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-400">
+                  確認中...
+                </span>
+              ) : userEmail ? (
+                <button
+                  onClick={handleLogout}
+                  className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition active:scale-[0.98]"
+                >
+                  ログアウト
+                </button>
+              ) : (
+                <button
+                  onClick={() => router.push("/login")}
+                  className="rounded-full bg-black px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition active:scale-[0.98]"
+                >
+                  ログイン
+                </button>
+              )}
+            </div>
           </div>
 
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -337,6 +380,12 @@ useEffect(() => {
             あなたのプロフィールと最新情報から、
             今日投稿するネタをAIが考えます。
           </p>
+
+          {userEmail && !authLoading && (
+            <p className="mt-2 text-xs text-gray-400">
+              ログイン中：{userEmail}
+            </p>
+          )}
         </header>
 
 {/* Threads連携 */}
@@ -384,34 +433,33 @@ useEffect(() => {
       </p>
     </div>
    ) : (
-    <>
-      <button
-        onClick={async () => {
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
+    <button
+      onClick={async () => {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-          if (!user) {
-            setError("ログインしてください。");
-            return;
-          }
+        if (!user) {
+          setError("ログインしてください。");
+          return;
+        }
 
-          window.location.href =
-            `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
-        }}
-        className="mt-5 w-full rounded-xl bg-black px-5 py-3.5 text-sm font-bold text-white transition active:scale-[0.98]"
-      >
-        Threadsと連携する
-      </button>
-      
-      <button
-        onClick={() => router.push("/settings")}
-        className="mt-3 w-full rounded-xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-800 shadow-sm transition active:scale-[0.98]"
-      >
-        ⚙️ 自動投稿設定
-      </button>
-    </>
+        window.location.href =
+          `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
+      }}
+      className="mt-5 w-full rounded-xl bg-black px-5 py-3.5 text-sm font-bold text-white transition active:scale-[0.98]"
+    >
+      Threadsと連携する
+    </button>
   )}
+
+  {/* 連携状態に関わらず常に表示 */}
+  <button
+    onClick={() => router.push("/settings")}
+    className="mt-3 w-full rounded-xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-800 shadow-sm transition active:scale-[0.98]"
+  >
+    ⚙️ 自動投稿設定
+  </button>
 </section>
 
         {/* 入力カード */}
