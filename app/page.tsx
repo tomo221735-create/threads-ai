@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
   const [theme, setTheme] = useState("");
   const [target, setTarget] = useState("");
+  
 
   const [posts, setPosts] = useState<string[]>([]);
   const [ideas, setIdeas] = useState<string[]>([]);
@@ -401,6 +404,13 @@ useEffect(() => {
     </button>
   )}
 </section>
+
+<button
+  onClick={() => router.push("/settings")}
+  className="mb-6 w-full rounded-xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-800 shadow-sm transition active:scale-[0.98]"
+>
+  ⚙️ 自動投稿設定
+</button>
 
         {/* 入力カード */}
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 sm:p-7">
