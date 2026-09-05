@@ -341,8 +341,15 @@ useEffect(() => {
               AI SNS ASSISTANT
             </div>
 
-            {/* ログイン／設定ボタン */}
+            {/* ログイン／プロフィール／設定ボタン */}
             <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={() => router.push("/profile")}
+                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition active:scale-[0.98]"
+              >
+                👤 プロフィール
+              </button>
+
               <button
                 onClick={() => router.push("/settings")}
                 className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition active:scale-[0.98]"
