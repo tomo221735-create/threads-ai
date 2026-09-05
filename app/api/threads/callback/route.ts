@@ -84,10 +84,41 @@ export async function GET(request: Request) {
 
     console.log("Short-lived Threads token obtained.");
 
-    // ② Threadsプロフィール取得
+    // ①-2 短期トークン → 長期トークン（60日間有効）へ交換
+    let finalAccessToken = accessToken;
+    let expiresInSeconds = 3600; // デフォルトは短期トークンの有効期限(1時間)
+
+    try {
+      const exchangeUrl =
+        `https://graph.threads.net/access_token` +
+        `?grant_type=th_exchange_token` +
+        `&client_secret=${encodeURIComponent(appSecret)}` +
+        `&access_token=${encodeURIComponent(accessToken)}`;
+
+      const exchangeResponse = await fetch(exchangeUrl);
+      const exchangeData = await exchangeResponse.json();
+
+      if (exchangeResponse.ok && exchangeData.access_token) {
+        finalAccessToken = exchangeData.access_token;
+        expiresInSeconds = exchangeData.expires_in ?? 60 * 24 * 60 * 60; // 60日
+        console.log("Long-lived Threads token obtained.");
+      } else {
+        console.error(
+          "Threads long-lived token exchange failed. Falling back to short-lived token.",
+          exchangeData
+        );
+      }
+    } catch (exchangeError) {
+      console.error(
+        "Threads long-lived token exchange error. Falling back to short-lived token.",
+        exchangeError
+      );
+    }
+
+    // ② Threadsプロフィール取得（長期トークンで取得）
     const profileResponse = await fetch(
       `https://graph.threads.net/v1.0/me?fields=id,username&access_token=${encodeURIComponent(
-        accessToken
+        finalAccessToken
       )}`
     );
 
@@ -123,8 +154,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// 長期トークンの有効期限（安全のため実際の有効期限より1日早めに切る）
+const safetyMarginSeconds = 24 * 60 * 60;
 const expiresAt = new Date(
-  Date.now() + 3600 * 1000
+  Date.now() + (expiresInSeconds - safetyMarginSeconds) * 1000
 ).toISOString();
 
 const { error: upsertError } = await supabase
@@ -133,7 +166,7 @@ const { error: upsertError } = await supabase
     id: userId,  // ← PRIMARY KEY を含める
     threads_user_id: threadsProfile.id,
     threads_username: threadsProfile.username,
-    threads_access_token: accessToken,
+    threads_access_token: finalAccessToken,
     threads_token_expires_at: expiresAt,
   });
 

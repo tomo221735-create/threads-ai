@@ -3,6 +3,10 @@
     {
       "path": "/api/threads/auto-post",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/threads/refresh-token",
+      "schedule": "0 3 * * *"
     }
   ]
 }
