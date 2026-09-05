@@ -123,10 +123,15 @@ export async function GET(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    console.log("userId:", userId);
+console.log("threadsProfile:", threadsProfile);
+
     // 短期トークンなので短めの有効期限を設定
     const expiresAt = new Date(
       Date.now() + 3600 * 1000
     ).toISOString();
+
+    console.log("Attempting to update profiles...");
 
     const { error: updateError } =
       await supabase
@@ -143,7 +148,10 @@ export async function GET(request: Request) {
         })
         .eq("id", userId);
 
+        console.log("Update result:", { updateError });
+
     if (updateError) {
+       console.error("Supabase update error:", updateError);
       console.error(
         "Supabase update error:",
         updateError
