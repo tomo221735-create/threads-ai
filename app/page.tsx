@@ -331,13 +331,14 @@ useEffect(() => {
 };
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-6 sm:px-6 sm:py-10">
+    <main className="min-h-screen px-4 py-6 sm:px-6 sm:py-10">
       <div className="mx-auto max-w-3xl">
 
         {/* ヘッダー */}
         <header className="mb-7">
           <div className="flex items-start justify-between gap-3">
-            <div className="mb-2 inline-flex rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-accent-cyan/30 bg-accent-cyan/10 px-3 py-1 text-xs font-semibold tracking-wide text-accent-cyan">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent-cyan shadow-[0_0_8px_2px_rgba(79,243,208,0.7)]" />
               AI SNS ASSISTANT
             </div>
 
@@ -345,33 +346,33 @@ useEffect(() => {
             <div className="flex shrink-0 items-center gap-2">
               <button
                 onClick={() => router.push("/profile")}
-                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition active:scale-[0.98]"
+                className="rounded-full border border-border-soft bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary shadow-sm transition hover:border-accent-cyan/40 active:scale-[0.98]"
               >
                 👤 プロフィール
               </button>
 
               <button
                 onClick={() => router.push("/settings")}
-                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition active:scale-[0.98]"
+                className="rounded-full border border-border-soft bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary shadow-sm transition hover:border-accent-cyan/40 active:scale-[0.98]"
               >
                 ⚙️ 設定
               </button>
 
               {authLoading ? (
-                <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-400">
+                <span className="rounded-full bg-surface px-3 py-1.5 text-xs font-semibold text-text-faint">
                   確認中...
                 </span>
               ) : userEmail ? (
                 <button
                   onClick={handleLogout}
-                  className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition active:scale-[0.98]"
+                  className="rounded-full border border-border-soft bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary shadow-sm transition hover:border-accent-cyan/40 active:scale-[0.98]"
                 >
                   ログアウト
                 </button>
               ) : (
                 <button
                   onClick={() => router.push("/login")}
-                  className="rounded-full bg-black px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition active:scale-[0.98]"
+                  className="rounded-full bg-accent-cyan px-3 py-1.5 text-xs font-bold text-[#06110d] shadow-[0_0_16px_rgba(79,243,208,0.35)] transition active:scale-[0.98]"
                 >
                   ログイン
                 </button>
@@ -379,46 +380,46 @@ useEffect(() => {
             </div>
           </div>
 
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          <h1 className="text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
             Threads AI
           </h1>
 
-          <p className="mt-2 text-sm leading-6 text-gray-500 sm:text-base">
+          <p className="mt-2 text-sm leading-6 text-text-muted sm:text-base">
             あなたのプロフィールと最新情報から、
             今日投稿するネタをAIが考えます。
           </p>
 
           {userEmail && !authLoading && (
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="mt-2 text-xs text-text-faint">
               ログイン中：{userEmail}
             </p>
           )}
         </header>
 
 {/* Threads連携 */}
-<section className="mb-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 sm:p-6">
+<section className="mb-6 rounded-2xl border border-border-soft bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:p-6">
   <div className="flex items-center justify-between gap-4">
     <div>
-      <h2 className="font-bold text-gray-900">
+      <h2 className="font-bold text-text-primary">
         Threadsアカウント
       </h2>
 
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-text-muted">
         生成した投稿をThreadsへ投稿できます。
       </p>
     </div>
 
     <div className="shrink-0">
       {threadsLoading ? (
-        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-500">
+        <span className="rounded-full bg-surface-raised px-3 py-1 text-xs font-semibold text-text-muted">
           確認中...
         </span>
       ) : threadsUsername ? (
-        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+        <span className="rounded-full border border-accent-cyan/30 bg-accent-cyan/10 px-3 py-1 text-xs font-semibold text-accent-cyan">
           ✓ 連携済み
         </span>
       ) : (
-        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+        <span className="rounded-full bg-surface-raised px-3 py-1 text-xs font-semibold text-text-muted">
           未連携
         </span>
       )}
@@ -426,16 +427,16 @@ useEffect(() => {
   </div>
 
   {threadsLoading ? (
-    <div className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+    <div className="mt-5 rounded-xl bg-surface-raised p-4 text-sm text-text-muted">
       Threads連携状況を確認しています...
     </div>
   ) : threadsUsername ? (
-    <div className="mt-5 rounded-xl bg-green-50 p-4">
-      <p className="text-sm font-semibold text-green-700">
+    <div className="mt-5 rounded-xl border border-accent-cyan/20 bg-accent-cyan/5 p-4">
+      <p className="text-sm font-semibold text-accent-cyan">
         ✓ Threadsアカウントと連携されています
       </p>
 
-      <p className="mt-1 text-sm text-green-600">
+      <p className="mt-1 text-sm text-text-primary">
         @{threadsUsername}
       </p>
     </div>
@@ -454,7 +455,7 @@ useEffect(() => {
         window.location.href =
           `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
       }}
-      className="mt-5 w-full rounded-xl bg-black px-5 py-3.5 text-sm font-bold text-white transition active:scale-[0.98]"
+      className="mt-5 w-full rounded-xl bg-accent-cyan px-5 py-3.5 text-sm font-bold text-[#06110d] shadow-[0_0_20px_rgba(79,243,208,0.3)] transition active:scale-[0.98]"
     >
       Threadsと連携する
     </button>
@@ -463,28 +464,28 @@ useEffect(() => {
   {/* 連携状態に関わらず常に表示 */}
   <button
     onClick={() => router.push("/settings")}
-    className="mt-3 w-full rounded-xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-800 shadow-sm transition active:scale-[0.98]"
+    className="mt-3 w-full rounded-xl border border-border-soft bg-surface-raised px-5 py-3.5 text-sm font-bold text-text-primary shadow-sm transition hover:border-accent-violet/40 active:scale-[0.98]"
   >
     ⚙️ 自動投稿設定
   </button>
 </section>
 
         {/* 入力カード */}
-        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 sm:p-7">
+        <section className="rounded-2xl border border-border-soft bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:p-7">
 
           <div className="mb-6">
-            <h2 className="text-lg font-bold">
+            <h2 className="text-lg font-bold text-text-primary">
               投稿設定
             </h2>
 
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-text-muted">
               発信したい内容と、届けたい相手を入力してください。
             </p>
           </div>
 
           {/* テーマ */}
           <div className="mb-5">
-            <label className="mb-2 block text-sm font-semibold text-gray-800">
+            <label className="mb-2 block text-sm font-semibold text-text-primary">
               発信テーマ
             </label>
 
@@ -492,13 +493,13 @@ useEffect(() => {
               value={theme}
               onChange={(e) => setTheme(e.target.value)}
               placeholder="例：AIを使った副業"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-base outline-none transition focus:border-black focus:bg-white"
+              className="w-full rounded-xl border border-border-soft bg-surface-raised px-4 py-3.5 text-base text-text-primary placeholder:text-text-faint outline-none transition focus:border-accent-cyan/50 focus:shadow-[0_0_0_3px_rgba(79,243,208,0.12)]"
             />
           </div>
 
           {/* ターゲット */}
           <div className="mb-6">
-            <label className="mb-2 block text-sm font-semibold text-gray-800">
+            <label className="mb-2 block text-sm font-semibold text-text-primary">
               ターゲット
             </label>
 
@@ -506,7 +507,7 @@ useEffect(() => {
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder="例：AIを使って副業を始めたい大学生"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-base outline-none transition focus:border-black focus:bg-white"
+              className="w-full rounded-xl border border-border-soft bg-surface-raised px-4 py-3.5 text-base text-text-primary placeholder:text-text-faint outline-none transition focus:border-accent-cyan/50 focus:shadow-[0_0_0_3px_rgba(79,243,208,0.12)]"
             />
           </div>
 
@@ -514,7 +515,7 @@ useEffect(() => {
           <button
             onClick={generateIdeas}
             disabled={ideasLoading || loading}
-            className="w-full rounded-xl bg-black px-5 py-4 text-base font-bold text-white shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-xl bg-gradient-to-r from-accent-cyan to-accent-violet px-5 py-4 text-base font-bold text-[#06110d] shadow-[0_0_24px_rgba(79,243,208,0.25)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {ideasLoading
               ? "🔎 今日のネタを探しています..."
@@ -525,7 +526,7 @@ useEffect(() => {
           <button
             onClick={generatePosts}
             disabled={loading || ideasLoading}
-            className="mt-3 w-full rounded-xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-semibold text-gray-800 transition active:scale-[0.98] disabled:opacity-50"
+            className="mt-3 w-full rounded-xl border border-border-soft bg-surface-raised px-5 py-3.5 text-sm font-semibold text-text-primary transition hover:border-accent-violet/40 active:scale-[0.98] disabled:opacity-50"
           >
             {loading
               ? "AIが生成中..."
@@ -534,14 +535,14 @@ useEffect(() => {
 
           {/* エラー */}
           {error && (
-            <div className="mt-5 rounded-xl bg-red-50 p-4 text-sm leading-6 text-red-600">
+            <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm leading-6 text-red-300">
               {error}
             </div>
           )}
 
           {/* 成功メッセージ */}
           {message && (
-            <div className="mt-5 rounded-xl bg-green-50 p-4 text-sm leading-6 text-green-700">
+            <div className="mt-5 rounded-xl border border-accent-cyan/20 bg-accent-cyan/10 p-4 text-sm leading-6 text-accent-cyan">
               {message}
             </div>
           )}
@@ -555,12 +556,12 @@ useEffect(() => {
               <div className="flex items-center gap-2">
                 <span className="text-xl">🔥</span>
 
-                <h2 className="text-xl font-bold">
+                <h2 className="text-xl font-bold text-text-primary">
                   今日使える投稿ネタ
                 </h2>
               </div>
 
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-text-muted">
                 あなたのプロフィールと最新情報からAIが選びました。
               </p>
             </div>
@@ -570,23 +571,23 @@ useEffect(() => {
               {ideas.map((idea, index) => (
                 <article
                   key={index}
-                  className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 sm:p-6"
+                  className="rounded-2xl border border-border-soft bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:p-6"
                 >
 
                   <div className="mb-4 flex items-center justify-between">
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">
+                    <span className="rounded-full bg-surface-raised px-3 py-1 text-xs font-bold text-accent-violet">
                       ネタ {index + 1}
                     </span>
                   </div>
 
-                  <div className="whitespace-pre-wrap text-sm leading-7 text-gray-800 sm:text-base">
+                  <div className="whitespace-pre-wrap text-sm leading-7 text-text-primary sm:text-base">
                     {idea}
                   </div>
 
                   <button
                     onClick={() => generateFromIdea(idea)}
                     disabled={loading}
-                    className="mt-5 w-full rounded-xl bg-black px-4 py-3.5 text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-50"
+                    className="mt-5 w-full rounded-xl bg-gradient-to-r from-accent-cyan to-accent-violet px-4 py-3.5 text-sm font-bold text-[#06110d] shadow-[0_0_20px_rgba(79,243,208,0.2)] transition active:scale-[0.98] disabled:opacity-50"
                   >
                     {loading
                       ? "投稿を作成中..."
@@ -605,11 +606,11 @@ useEffect(() => {
           <section className="mt-10">
 
             <div className="mb-4">
-              <h2 className="text-xl font-bold">
+              <h2 className="text-xl font-bold text-text-primary">
                 ✍️ 生成された投稿
               </h2>
 
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-text-muted">
                 必要なら文章を編集してから保存できます。
               </p>
             </div>
@@ -619,15 +620,15 @@ useEffect(() => {
               {posts.map((post, index) => (
                 <article
                   key={index}
-                  className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 sm:p-6"
+                  className="rounded-2xl border border-border-soft bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:p-6"
                 >
 
                   <div className="mb-3 flex items-center justify-between">
-                    <span className="text-sm font-bold text-gray-500">
+                    <span className="text-sm font-bold text-text-muted">
                       投稿 {index + 1}
                     </span>
 
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-text-faint">
                       下書き
                     </span>
                   </div>
@@ -638,7 +639,7 @@ useEffect(() => {
                       updatePost(index, e.target.value)
                     }
                     rows={7}
-                    className="w-full resize-y rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm leading-7 outline-none transition focus:border-black focus:bg-white sm:text-base"
+                    className="w-full resize-y rounded-xl border border-border-soft bg-surface-raised p-4 text-sm leading-7 text-text-primary outline-none transition focus:border-accent-cyan/50 focus:shadow-[0_0_0_3px_rgba(79,243,208,0.12)] sm:text-base"
                   />
 
                   <div className="mt-4 grid grid-cols-3 gap-3">
@@ -646,7 +647,7 @@ useEffect(() => {
                     <button
                       onClick={() => savePost(index)}
                       disabled={saving === index}
-                      className="rounded-xl bg-black px-4 py-3 font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
+                      className="rounded-xl bg-accent-violet px-4 py-3 font-semibold text-[#0c0820] shadow-[0_0_16px_rgba(139,124,255,0.3)] transition active:scale-[0.98] disabled:opacity-50"
                     >
                       {saving === index
                         ? "保存中..."
@@ -657,7 +658,7 @@ useEffect(() => {
                       onClick={() =>
                         navigator.clipboard.writeText(post)
                       }
-                      className="rounded-xl border border-gray-200 bg-white px-4 py-3 font-semibold text-gray-800 transition active:scale-[0.98]"
+                      className="rounded-xl border border-border-soft bg-surface-raised px-4 py-3 font-semibold text-text-primary transition hover:border-accent-cyan/40 active:scale-[0.98]"
                     >
                       コピー
                     </button>
@@ -665,7 +666,7 @@ useEffect(() => {
                     <button
   onClick={() => postToThreads(index)}
   disabled={posting === index}
-  className="rounded-xl bg-black px-4 py-3 font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
+  className="rounded-xl bg-accent-cyan px-4 py-3 font-semibold text-[#06110d] shadow-[0_0_16px_rgba(79,243,208,0.3)] transition active:scale-[0.98] disabled:opacity-50"
 >
   {posting === index
     ? "投稿中..."
@@ -682,7 +683,7 @@ useEffect(() => {
         )}
 
         {/* フッター */}
-        <footer className="py-10 text-center text-xs text-gray-400">
+        <footer className="py-10 text-center text-xs text-text-faint">
           Threads AI
         </footer>
 

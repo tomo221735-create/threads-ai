@@ -21,8 +21,8 @@
   --color-accent-violet: var(--accent-violet);
   --color-text-primary: var(--text-primary);
   --color-text-muted: var(--text-muted);
-  --font-display: var(--font-display);
-  --font-body: var(--font-body);
+  --font-display: var(--font-display-raw);
+  --font-body: var(--font-body-raw);
 }
 
 body {
