@@ -15,6 +15,32 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// 「HH:MM」または「HH:MM:SS」を 0〜1439 の分に変換する
+function toMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// 外部cron（cron-job.orgなど）は毎分ぴったりには呼ばれないため、
+// 予定時刻から一定の許容時間（分）以内であれば「一致」とみなす。
+// GRACE_MINUTES は呼び出し間隔（cron-job.org側の設定）より少し長めにしておく。
+const GRACE_MINUTES = 20;
+
+function findMatchedTime(
+  scheduledTimes: string[],
+  currentTime: string
+): string | undefined {
+  const nowMinutes = toMinutes(currentTime);
+
+  return scheduledTimes.find((time) => {
+    const diff = nowMinutes - toMinutes(time);
+
+    // 予定時刻ちょうど、または直後 GRACE_MINUTES 分以内なら一致とみなす
+    // （予定時刻より前や、大きく過ぎている場合は対象外）
+    return diff >= 0 && diff < GRACE_MINUTES;
+  });
+}
+
 // コンテナ（投稿の入れ物）が公開できる状態になるまで待つ
 // Threads APIはコンテナ作成が非同期のため、作成直後は公開できないことがある
 async function waitForContainerReady(
@@ -218,6 +244,7 @@ export async function GET(request: Request) {
 
     for (const setting of settings) {
       const userId = setting.user_id;
+      let matchedTime: string | undefined;
 
       try {
         // =========================
@@ -230,8 +257,9 @@ export async function GET(request: Request) {
           setting.post_time_3,
         ].filter(Boolean);
 
-        const matchedTime = scheduledTimes.find(
-          (time: string) => time === currentTime
+        matchedTime = findMatchedTime(
+          scheduledTimes,
+          currentTime
         );
 
         // 今の時間に投稿予定がなければスキップ
@@ -593,19 +621,14 @@ if (
 
         // 失敗した場合はログを削除
         // → 次のCronで再試行できる
-        await supabase
-          .from("auto_post_logs")
-          .delete()
-          .eq("user_id", userId)
-          .eq("post_date", postDate)
-          .eq(
-            "scheduled_time",
-            setting.post_time_1 === currentTime
-              ? setting.post_time_1
-              : setting.post_time_2 === currentTime
-              ? setting.post_time_2
-              : setting.post_time_3
-          );
+        if (matchedTime) {
+          await supabase
+            .from("auto_post_logs")
+            .delete()
+            .eq("user_id", userId)
+            .eq("post_date", postDate)
+            .eq("scheduled_time", matchedTime);
+        }
 
         results.push({
           userId,
