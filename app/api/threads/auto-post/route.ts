@@ -393,7 +393,7 @@ ${trendNews || "現在取得できるトレンド情報はありません。"}
 
         const containerResponse =
           await fetch(
-            `https://graph.threads.net/v1.0/${profile.threads_user_id}/threads`,
+            `https://graph.threads.net/v1.0/me/threads`,
             {
               method: "POST",
 
@@ -443,7 +443,7 @@ if (
 
         const publishResponse =
           await fetch(
-            `https://graph.threads.net/v1.0/${profile.threads_user_id}/threads_publish`,
+            `https://graph.threads.net/v1.0/me/threads_publish`,
             {
               method: "POST",
 
