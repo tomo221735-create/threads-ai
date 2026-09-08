@@ -11,6 +11,48 @@ function extractRawId(rawText: string): string | null {
   return match ? match[1] : null;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// コンテナ（投稿の入れ物）が公開できる状態になるまで待つ
+// Threads APIはコンテナ作成が非同期のため、作成直後は公開できないことがある
+async function waitForContainerReady(
+  containerId: string,
+  accessToken: string,
+  maxAttempts = 10,
+  intervalMs = 2000
+): Promise<void> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const statusUrl =
+      `https://graph.threads.net/v1.0/${containerId}` +
+      `?fields=status,error_message` +
+      `&access_token=${encodeURIComponent(accessToken)}`;
+
+    const statusResponse = await fetch(statusUrl, { cache: "no-store" });
+    const statusData = await statusResponse.json();
+
+    console.log(
+      `Container status check (${attempt + 1}/${maxAttempts}):`,
+      statusData
+    );
+
+    if (statusData.status === "FINISHED") {
+      return;
+    }
+
+    if (statusData.status === "ERROR") {
+      throw new Error(
+        statusData.error_message || "投稿の準備中にエラーが発生しました。"
+      );
+    }
+
+    await sleep(intervalMs);
+  }
+
+  console.warn("Container status check timed out, trying publish anyway.");
+}
+
 async function getTrendNews(
   topic: string,
   location: string
@@ -301,6 +343,7 @@ content: `
 今日投稿する文章を1つ作成してください。
 
 重要:
+- 「過去の投稿分析」に反応が良い傾向が書かれていれば、できるだけ活かす
 - 最新ニュースをそのまま紹介するだけにしない
 - ユーザー本人の経験・専門性・意見と結びつける
 - 「このニュースについて自分ならどう考えるか」という視点を重視する
@@ -459,6 +502,16 @@ if (
       `Threads投稿コンテナの作成に失敗しました。HTTP ${containerResponse.status}`
   );
 }
+
+        // =========================
+        // コンテナが公開できる状態になるまで待つ
+        // =========================
+
+        await waitForContainerReady(
+          containerId,
+          profile.threads_access_token
+        );
+
         // =========================
         // Threads公開
         // =========================
