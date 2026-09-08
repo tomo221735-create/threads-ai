@@ -20,6 +20,7 @@ const router = useRouter();
     products: "",
     forbidden_topics: "",
     tone: "親しみやすい",
+    custom_instructions: "",
   });
 
   const [saving, setSaving] = useState(false);
@@ -42,7 +43,7 @@ const router = useRouter();
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "name, age, job, title, location, bio, experience, skills, goals, topics, products, forbidden_topics, tone"
+          "name, age, job, title, location, bio, experience, skills, goals, topics, products, forbidden_topics, tone, custom_instructions"
         )
         .eq("id", user.id)
         .maybeSingle();
@@ -212,6 +213,13 @@ if (error) {
               updateField("forbidden_topics", v)
             }
             placeholder="例：家族、政治"
+          />
+
+          <TextArea
+            label="AIへの自由な要望"
+            value={form.custom_instructions}
+            onChange={(v) => updateField("custom_instructions", v)}
+            placeholder="例：一人称は「僕」にしてほしい / 絵文字は使わないでほしい / 毎回冒頭に質問を入れてほしい など、決まった項目に当てはまらない要望があれば自由に書いてください。"
           />
 
           <div>
