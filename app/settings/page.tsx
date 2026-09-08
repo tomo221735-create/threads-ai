@@ -110,50 +110,50 @@ setSaving(false);
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center text-text-muted">
         読み込み中...
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-8">
+    <main className="min-h-screen px-4 py-8">
       <div className="mx-auto max-w-2xl">
 
         <button
           onClick={() => router.push("/")}
-          className="mb-6 text-sm text-gray-500"
+          className="mb-6 text-sm text-text-muted transition hover:text-accent-cyan"
         >
           ← 戻る
         </button>
 
-        <h1 className="text-3xl font-bold">
+        <h1 className="text-3xl font-bold text-text-primary">
           自動投稿設定
         </h1>
 
-        <p className="mt-2 text-gray-500">
+        <p className="mt-2 text-text-muted">
           AIにThreadsの運用を任せるための設定です。
         </p>
 
-        <section className="mt-8 space-y-6 rounded-2xl bg-white p-6 shadow-sm">
+        <section className="mt-8 space-y-6 rounded-2xl border border-border-soft bg-surface p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
 
           {/* 自動投稿ON/OFF */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-bold">
+              <h2 className="font-bold text-text-primary">
                 自動投稿
               </h2>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-text-muted">
                 ONにするとAIが自動で投稿します。
               </p>
             </div>
 
             <button
               onClick={() => setEnabled(!enabled)}
-              className={`rounded-full px-5 py-2 text-sm font-bold ${
+              className={`rounded-full px-5 py-2 text-sm font-bold transition ${
                 enabled
-                  ? "bg-black text-white"
-                  : "bg-gray-200 text-gray-600"
+                  ? "bg-accent-cyan text-[#06110d] shadow-[0_0_16px_rgba(79,243,208,0.3)]"
+                  : "bg-surface-raised text-text-muted"
               }`}
             >
               {enabled ? "ON" : "OFF"}
@@ -162,7 +162,7 @@ setSaving(false);
 
           {/* 投稿数 */}
           <div>
-            <label className="mb-2 block font-semibold">
+            <label className="mb-2 block font-semibold text-text-primary">
               1日の投稿数
             </label>
 
@@ -171,7 +171,7 @@ setSaving(false);
               onChange={(e) =>
                 setPostsPerDay(Number(e.target.value))
               }
-              className="w-full rounded-xl border p-3"
+              className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
             >
               <option value={1}>1日1投稿</option>
               <option value={2}>1日2投稿</option>
@@ -181,7 +181,7 @@ setSaving(false);
 
           {/* 投稿時間 */}
           <div>
-            <label className="mb-3 block font-semibold">
+            <label className="mb-3 block font-semibold text-text-primary">
               投稿時間
             </label>
 
@@ -189,7 +189,7 @@ setSaving(false);
 
               {postsPerDay >= 1 && (
                 <div>
-                  <label className="text-sm text-gray-500">
+                  <label className="text-sm text-text-muted">
                     1回目
                   </label>
 
@@ -199,14 +199,14 @@ setSaving(false);
                     onChange={(e) =>
                       setPostTime1(e.target.value)
                     }
-                    className="mt-1 w-full rounded-xl border p-3"
+                    className="mt-1 w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50 [color-scheme:dark]"
                   />
                 </div>
               )}
 
               {postsPerDay >= 2 && (
                 <div>
-                  <label className="text-sm text-gray-500">
+                  <label className="text-sm text-text-muted">
                     2回目
                   </label>
 
@@ -216,14 +216,14 @@ setSaving(false);
                     onChange={(e) =>
                       setPostTime2(e.target.value)
                     }
-                    className="mt-1 w-full rounded-xl border p-3"
+                    className="mt-1 w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50 [color-scheme:dark]"
                   />
                 </div>
               )}
 
               {postsPerDay >= 3 && (
                 <div>
-                  <label className="text-sm text-gray-500">
+                  <label className="text-sm text-text-muted">
                     3回目
                   </label>
 
@@ -233,7 +233,7 @@ setSaving(false);
                     onChange={(e) =>
                       setPostTime3(e.target.value)
                     }
-                    className="mt-1 w-full rounded-xl border p-3"
+                    className="mt-1 w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50 [color-scheme:dark]"
                   />
                 </div>
               )}
@@ -243,7 +243,7 @@ setSaving(false);
 
           {/* 目的 */}
           <div>
-            <label className="mb-2 block font-semibold">
+            <label className="mb-2 block font-semibold text-text-primary">
               AIに任せる目的
             </label>
 
@@ -252,7 +252,7 @@ setSaving(false);
               onChange={(e) =>
                 setPurpose(e.target.value)
               }
-              className="w-full rounded-xl border p-3"
+              className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
             >
               <option>フォロワーを増やす</option>
               <option>認知を広げる</option>
@@ -265,11 +265,11 @@ setSaving(false);
           {/* トレンド */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-bold">
+              <h2 className="font-bold text-text-primary">
                 トレンド分析
               </h2>
 
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-text-muted">
                 最新の話題を分析して投稿テーマを決めます。
               </p>
             </div>
@@ -278,10 +278,10 @@ setSaving(false);
               onClick={() =>
                 setAutoTrend(!autoTrend)
               }
-              className={`rounded-full px-5 py-2 text-sm font-bold ${
+              className={`rounded-full px-5 py-2 text-sm font-bold transition ${
                 autoTrend
-                  ? "bg-black text-white"
-                  : "bg-gray-200 text-gray-600"
+                  ? "bg-accent-cyan text-[#06110d] shadow-[0_0_16px_rgba(79,243,208,0.3)]"
+                  : "bg-surface-raised text-text-muted"
               }`}
             >
               {autoTrend ? "ON" : "OFF"}
@@ -292,19 +292,19 @@ setSaving(false);
           <button
             onClick={saveSettings}
             disabled={saving}
-            className="w-full rounded-xl bg-black px-5 py-4 font-bold text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-gradient-to-r from-accent-cyan to-accent-violet px-5 py-4 font-bold text-[#06110d] shadow-[0_0_20px_rgba(79,243,208,0.25)] transition active:scale-[0.98] disabled:opacity-50"
           >
             {saving ? "保存中..." : "自動投稿設定を保存"}
           </button>
 
           {message && (
-            <div className="rounded-xl bg-green-50 p-4 text-sm text-green-700">
+            <div className="rounded-xl border border-accent-cyan/20 bg-accent-cyan/10 p-4 text-sm text-accent-cyan">
               {message}
             </div>
           )}
 
           {error && (
-            <div className="rounded-xl bg-red-50 p-4 text-sm text-red-600">
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
               {error}
             </div>
           )}

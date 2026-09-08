@@ -65,18 +65,25 @@ if (error) {
   };
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8">
+    <main className="min-h-screen p-4 sm:p-8">
       <div className="mx-auto max-w-3xl">
-        <h1 className="text-3xl font-bold">
+        <button
+          onClick={() => router.push("/")}
+          className="mb-6 text-sm text-text-muted transition hover:text-accent-cyan"
+        >
+          ← 戻る
+        </button>
+
+        <h1 className="text-3xl font-bold text-text-primary">
           プロフィール設定
         </h1>
 
-        <p className="mb-8 mt-2 text-gray-600">
+        <p className="mb-8 mt-2 text-text-muted">
           あなたについて詳しく設定すると、
           AIがよりあなたらしい投稿を作れるようになります。
         </p>
 
-        <div className="space-y-6 rounded-2xl bg-white p-6 shadow">
+        <div className="space-y-6 rounded-2xl border border-border-soft bg-surface p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
 
           <Field
             label="名前"
@@ -165,7 +172,7 @@ if (error) {
           />
 
           <div>
-            <label className="mb-2 block font-semibold">
+            <label className="mb-2 block font-semibold text-text-primary">
               文章の雰囲気
             </label>
 
@@ -174,7 +181,7 @@ if (error) {
               onChange={(e) =>
                 updateField("tone", e.target.value)
               }
-              className="w-full rounded-lg border p-3"
+              className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
             >
               <option>親しみやすい</option>
               <option>専門的</option>
@@ -187,7 +194,7 @@ if (error) {
           <button
             onClick={saveProfile}
             disabled={saving}
-            className="rounded-lg bg-black px-6 py-3 font-semibold text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-gradient-to-r from-accent-cyan to-accent-violet px-6 py-3.5 font-bold text-[#06110d] shadow-[0_0_20px_rgba(79,243,208,0.25)] transition active:scale-[0.98] disabled:opacity-50 sm:w-auto"
           >
             {saving ? "保存中..." : "プロフィールを保存"}
           </button>
@@ -208,13 +215,13 @@ if (error) {
     window.location.href =
       `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
   }}
-  className="rounded-lg bg-black px-6 py-3 font-semibold text-white"
+  className="w-full rounded-xl border border-border-soft bg-surface-raised px-6 py-3.5 font-semibold text-text-primary transition hover:border-accent-violet/40 active:scale-[0.98] sm:w-auto"
 >
   Threadsアカウントを連携する
 </button>
 
           {message && (
-            <p className="text-green-600">
+            <p className="text-accent-cyan">
               {message}
             </p>
           )}
@@ -237,7 +244,7 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-2 block font-semibold">
+      <label className="mb-2 block font-semibold text-text-primary">
         {label}
       </label>
 
@@ -245,7 +252,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border p-3"
+        className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary placeholder:text-text-faint outline-none transition focus:border-accent-cyan/50"
       />
     </div>
   );
@@ -264,7 +271,7 @@ function TextArea({
 }) {
   return (
     <div>
-      <label className="mb-2 block font-semibold">
+      <label className="mb-2 block font-semibold text-text-primary">
         {label}
       </label>
 
@@ -273,7 +280,7 @@ function TextArea({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={4}
-        className="w-full rounded-lg border p-3"
+        className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary placeholder:text-text-faint outline-none transition focus:border-accent-cyan/50"
       />
     </div>
   );
