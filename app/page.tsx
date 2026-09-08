@@ -27,6 +27,34 @@ const [threadsLoading, setThreadsLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  type AnalyzedPost = {
+    threads_post_id: string;
+    text: string;
+    permalink: string | null;
+    likes: number;
+    replies: number;
+    reposts: number;
+    quotes: number;
+    views: number;
+    engagement_score: number;
+  };
+
+  const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
+  const [analysisTopPosts, setAnalysisTopPosts] = useState<AnalyzedPost[]>([]);
+  const [analysisStats, setAnalysisStats] = useState<{
+    postCount: number;
+    avgLikes: number;
+    avgReplies: number;
+    avgReposts: number;
+    avgViews: number;
+  } | null>(null);
+  const [analysisUpdatedAt, setAnalysisUpdatedAt] = useState<string | null>(
+    null
+  );
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+  const [analysisNeedsReconnect, setAnalysisNeedsReconnect] = useState(false);
+
 useEffect(() => {
   const checkThreadsConnection = async () => {
     try {
@@ -42,9 +70,11 @@ useEffect(() => {
         return;
       }
 
-      const { data, error } = await supabase
+            const { data, error } = await supabase
         .from("profiles")
-        .select("threads_username")
+        .select(
+          "threads_username, analysis_summary, analysis_stats, analysis_updated_at"
+        )
         .eq("id", user.id)
         .maybeSingle();
 
@@ -52,6 +82,9 @@ useEffect(() => {
         console.error(error);
       } else {
         setThreadsUsername(data?.threads_username ?? null);
+        setAnalysisSummary(data?.analysis_summary ?? null);
+        setAnalysisStats(data?.analysis_stats ?? null);
+        setAnalysisUpdatedAt(data?.analysis_updated_at ?? null);
       }
     } catch (error) {
       console.error(error);
@@ -330,9 +363,55 @@ useEffect(() => {
   }
 };
 
+   const runAnalysis = async () => {
+    setAnalysisLoading(true);
+    setAnalysisError("");
+    setAnalysisNeedsReconnect(false);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        setAnalysisError("ログインしてください。");
+        setAnalysisLoading(false);
+        return;
+      }
+
+      const response = await fetch("/api/threads/analyze", {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.needsReconnect) {
+          setAnalysisNeedsReconnect(true);
+        }
+        throw new Error(data.error || "分析に失敗しました。");
+      }
+
+      setAnalysisSummary(data.summary ?? null);
+      setAnalysisTopPosts(data.topPosts ?? []);
+      setAnalysisStats(data.stats ?? null);
+      setAnalysisUpdatedAt(data.updatedAt ?? null);
+
+      if (data.message) {
+        setAnalysisError(data.message);
+      }
+    } catch (err) {
+      console.error(err);
+      setAnalysisError(
+        err instanceof Error ? err.message : "分析に失敗しました。"
+      );
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
   return (
-    <main className="min-h-screen px-4 py-6 sm:px-6 sm:py-10">
-      <div className="mx-auto max-w-3xl">
+    <main className="min-h-screen px-4 py-6 sm:px-6 sm:py-10">      <div className="mx-auto max-w-3xl">
 
         {/* ヘッダー */}
         <header className="mb-7">
@@ -461,7 +540,7 @@ useEffect(() => {
     </button>
   )}
 
-  {/* 連携状態に関わらず常に表示 */}
+    {/* 連携状態に関わらず常に表示 */}
   <button
     onClick={() => router.push("/settings")}
     className="mt-3 w-full rounded-xl border border-border-soft bg-surface-raised px-5 py-3.5 text-sm font-bold text-text-primary shadow-sm transition hover:border-accent-violet/40 active:scale-[0.98]"
@@ -469,6 +548,123 @@ useEffect(() => {
     ⚙️ 自動投稿設定
   </button>
 </section>
+
+        {/* 過去の投稿分析 */}
+        <section className="mb-6 rounded-2xl border border-border-soft bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="font-bold text-text-primary">
+                📊 過去の投稿分析
+              </h2>
+
+              <p className="mt-1 text-sm text-text-muted">
+                反応が良かった投稿の傾向を分析し、次の投稿づくりに活かします。
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={runAnalysis}
+            disabled={analysisLoading || !threadsUsername}
+            className="mt-5 w-full rounded-xl bg-gradient-to-r from-accent-cyan to-accent-violet px-5 py-3.5 text-sm font-bold text-[#06110d] shadow-[0_0_20px_rgba(79,243,208,0.25)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {analysisLoading
+              ? "分析中...（少し時間がかかります）"
+              : analysisSummary
+              ? "最新の投稿で分析を更新する"
+              : "過去の投稿を分析する"}
+          </button>
+
+          {!threadsUsername && (
+            <p className="mt-3 text-xs text-text-faint">
+              Threadsと連携すると分析できるようになります。
+            </p>
+          )}
+
+          {analysisError && (
+            <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm leading-6 text-red-300">
+              {analysisError}
+
+              {analysisNeedsReconnect && (
+                <button
+                  onClick={async () => {
+                    const {
+                      data: { user },
+                    } = await supabase.auth.getUser();
+
+                    if (!user) return;
+
+                    window.location.href =
+                      `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
+                  }}
+                  className="mt-3 block w-full rounded-xl border border-red-400/30 bg-surface-raised px-4 py-2.5 text-center text-sm font-semibold text-text-primary transition hover:border-accent-cyan/40"
+                >
+                  Threadsを再連携する（分析の権限を追加）
+                </button>
+              )}
+            </div>
+          )}
+
+          {analysisStats && (
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatBox label="分析した投稿数" value={analysisStats.postCount} />
+              <StatBox label="平均いいね" value={analysisStats.avgLikes} />
+              <StatBox label="平均返信" value={analysisStats.avgReplies} />
+              <StatBox label="平均閲覧数" value={analysisStats.avgViews} />
+            </div>
+          )}
+
+          {analysisSummary && (
+            <div className="mt-5 rounded-xl border border-accent-cyan/20 bg-accent-cyan/5 p-4">
+              <p className="mb-2 text-xs font-bold text-accent-cyan">
+                AIによる傾向分析
+              </p>
+
+              <p className="whitespace-pre-wrap text-sm leading-7 text-text-primary">
+                {analysisSummary}
+              </p>
+
+              {analysisUpdatedAt && (
+                <p className="mt-3 text-xs text-text-faint">
+                  最終分析：
+                  {new Date(analysisUpdatedAt).toLocaleString("ja-JP")}
+                </p>
+              )}
+            </div>
+          )}
+
+          {analysisTopPosts.length > 0 && (
+            <div className="mt-5">
+              <p className="mb-3 text-xs font-bold text-text-muted">
+                反応が良かった投稿 TOP{Math.min(analysisTopPosts.length, 5)}
+              </p>
+
+              <div className="space-y-3">
+                {analysisTopPosts.map((post, index) => (
+                  <div
+                    key={post.threads_post_id}
+                    className="rounded-xl border border-border-soft bg-surface-raised p-4"
+                  >
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent-violet">
+                        #{index + 1}
+                      </span>
+
+                      <span className="text-xs text-text-faint">
+                        ❤️{post.likes} 💬{post.replies} 🔁{post.reposts} 👀
+                        {post.views}
+                      </span>
+                    </div>
+
+                    <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-text-primary">
+                      {post.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* 入力カード */}
         <section className="rounded-2xl border border-border-soft bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:p-7">
@@ -687,7 +883,16 @@ useEffect(() => {
           Threads AI
         </footer>
 
-      </div>
+            </div>
     </main>
+  );
+}
+
+function StatBox({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-border-soft bg-surface-raised p-3 text-center">
+      <p className="text-lg font-bold text-text-primary">{value}</p>
+      <p className="mt-0.5 text-[11px] text-text-muted">{label}</p>
+    </div>
   );
 }

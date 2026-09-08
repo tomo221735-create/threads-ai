@@ -28,8 +28,8 @@ export async function GET(request: Request) {
 
 const redirectUri = "https://threads-ai-six.vercel.app/api/threads/callback";
 
-    const scopes =
-      "threads_basic,threads_content_publish";
+       const scopes =
+      "threads_basic,threads_content_publish,threads_manage_insights";
 
     const state = Buffer.from(
       JSON.stringify({
