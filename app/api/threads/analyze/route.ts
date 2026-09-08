@@ -1,9 +1,3 @@
-bash
-
-cat /home/claude/threads-ai-extracted/threads-ai/app/api/threads/analyze/route.ts
-
-出力
-
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
