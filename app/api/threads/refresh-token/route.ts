@@ -1,148 +1,157 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   try {
-    // ① ログインユーザー取得
-    const supabaseAuth = await createSupabaseServerClient();
+    // =========================
+    // Cron認証
+    // =========================
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAuth.auth.getUser();
+    const authHeader = request.headers.get("authorization");
 
-    if (userError || !user) {
+    if (
+      !process.env.CRON_SECRET ||
+      authHeader !== `Bearer ${process.env.CRON_SECRET}`
+    ) {
       return NextResponse.json(
-        { error: "ログインしてください。" },
+        { error: "Unauthorized" },
         { status: 401 }
       );
     }
 
-    // ② 投稿内容取得
-    const body = await request.json();
-    const content = body.content;
-
-    if (!content || typeof content !== "string") {
-      return NextResponse.json(
-        { error: "投稿内容がありません。" },
-        { status: 400 }
-      );
-    }
-
-    // ③ Service Roleでプロフィール取得
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { data: profile, error: profileError } = await supabase
+    // =========================
+    // Threads連携済みユーザーを取得
+    // =========================
+
+    const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
-      .select(
-        "threads_user_id, threads_access_token, threads_token_expires_at"
-      )
-      .eq("id", user.id)
-      .single();
+      .select("id, threads_access_token, threads_token_expires_at")
+      .not("threads_access_token", "is", null);
 
-    if (profileError || !profile) {
+    if (profilesError) {
+      console.error("Profiles fetch error:", profilesError);
+
       return NextResponse.json(
-        { error: "プロフィール情報が見つかりません。" },
-        { status: 404 }
+        { error: "プロフィール一覧の取得に失敗しました。" },
+        { status: 500 }
       );
     }
 
-    if (!profile.threads_access_token) {
-      return NextResponse.json(
-        { error: "Threadsアカウントを連携してください。" },
-        { status: 400 }
-      );
+    if (!profiles || profiles.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: "Threads連携済みのユーザーはいません。",
+      });
     }
 
-    // トークンの有効期限を確認
-    if (profile.threads_token_expires_at) {
-      const expiresAt = new Date(profile.threads_token_expires_at);
-      if (expiresAt < new Date()) {
-        return NextResponse.json(
-          {
-            error:
-              "Threadsトークンの有効期限が切れています。再度連携してください。",
-          },
-          { status: 401 }
-        );
+    // 期限が7日以内に切れるトークンだけを更新対象にする
+    const refreshThresholdMs = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    const results = [];
+
+    for (const profile of profiles) {
+      const expiresAt = profile.threads_token_expires_at
+        ? new Date(profile.threads_token_expires_at).getTime()
+        : 0;
+
+      const needsRefresh = expiresAt - now < refreshThresholdMs;
+
+      if (!needsRefresh) {
+        continue;
       }
-    }
 
-    // ④ Threads投稿用コンテナ作成
-    const containerResponse = await fetch(
-      "https://graph.threads.net/v1.0/me/threads",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          media_type: "TEXT",
-          text: content,
-          access_token: profile.threads_access_token,
-        }),
+      try {
+        const refreshUrl =
+          `https://graph.threads.net/refresh_access_token` +
+          `?grant_type=th_refresh_token` +
+          `&access_token=${encodeURIComponent(profile.threads_access_token)}`;
+
+        const refreshResponse = await fetch(refreshUrl);
+        const refreshData = await refreshResponse.json();
+
+        if (!refreshResponse.ok || !refreshData.access_token) {
+          console.error(
+            "Threads token refresh failed:",
+            profile.id,
+            refreshData
+          );
+
+          results.push({
+            userId: profile.id,
+            success: false,
+            error: refreshData?.error?.message ?? "refresh failed",
+          });
+
+          continue;
+        }
+
+        const expiresInSeconds =
+          refreshData.expires_in ?? 60 * 24 * 60 * 60; // 60日
+
+        // 安全のため実際の有効期限より1日早めに切る
+        const safetyMarginSeconds = 24 * 60 * 60;
+        const newExpiresAt = new Date(
+          now + (expiresInSeconds - safetyMarginSeconds) * 1000
+        ).toISOString();
+
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({
+            threads_access_token: refreshData.access_token,
+            threads_token_expires_at: newExpiresAt,
+          })
+          .eq("id", profile.id);
+
+        if (updateError) {
+          console.error(
+            "Supabase update error:",
+            profile.id,
+            updateError
+          );
+
+          results.push({
+            userId: profile.id,
+            success: false,
+            error: "保存に失敗しました。",
+          });
+
+          continue;
+        }
+
+        results.push({
+          userId: profile.id,
+          success: true,
+          newExpiresAt,
+        });
+      } catch (error) {
+        console.error("Token refresh error:", profile.id, error);
+
+        results.push({
+          userId: profile.id,
+          success: false,
+          error:
+            error instanceof Error ? error.message : "不明なエラー",
+        });
       }
-    );
-
-    const containerData = await containerResponse.json();
-
-    console.log("Threads container response:", containerData);
-
-    if (!containerResponse.ok || !containerData.id) {
-      return NextResponse.json(
-        {
-          error: "Threads投稿の準備に失敗しました。",
-          details: containerData,
-        },
-        { status: 400 }
-      );
-    }
-
-    // ⑤ 投稿を公開
-    const publishResponse = await fetch(
-      "https://graph.threads.net/v1.0/me/threads_publish",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          creation_id: containerData.id,
-          access_token: profile.threads_access_token,
-        }),
-      }
-    );
-
-    const publishData = await publishResponse.json();
-
-    console.log("Threads publish response:", publishData);
-
-    if (!publishResponse.ok || !publishData.id) {
-      return NextResponse.json(
-        {
-          error: "Threadsへの投稿に失敗しました。",
-          details: publishData,
-        },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json({
       success: true,
-      message: "Threadsへの投稿に成功しました！",
-      threads_post_id: publishData.id,
+      checked: profiles.length,
+      refreshed: results.length,
+      results,
     });
   } catch (error) {
-    console.error("Threads post error:", error);
+    console.error("Refresh token cron error:", error);
 
     return NextResponse.json(
-      {
-        error: "Threads投稿中にエラーが発生しました。",
-      },
+      { error: "トークン更新処理でエラーが発生しました。" },
       { status: 500 }
     );
   }
