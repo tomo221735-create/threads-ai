@@ -3,6 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { XMLParser } from "fast-xml-parser";
 
+// 大きな数値IDがJSON数値としてパースされ精度が失われるのを防ぐため、
+// レスポンスの生テキストから "id":"..." または "id":123... を
+// 文字列のまま安全に取り出す
+function extractRawId(rawText: string): string | null {
+  const match = rawText.match(/"id"\s*:\s*"?(\d+)"?/);
+  return match ? match[1] : null;
+}
+
 async function getTrendNews(
   topic: string,
   location: string
@@ -411,8 +419,19 @@ ${trendNews || "現在取得できるトレンド情報はありません。"}
             }
           );
 
+        const containerRawText =
+          await containerResponse.text();
+
         const containerData =
-          await containerResponse.json();
+          JSON.parse(containerRawText);
+
+        // JSON数値パースによる精度の欠損を避けるため、
+        // IDは生テキストから文字列のまま取得する
+        const containerId =
+          extractRawId(containerRawText) ??
+          (containerData.id != null
+            ? String(containerData.id)
+            : null);
 
         console.log(
           "Threads container:",
@@ -421,7 +440,7 @@ ${trendNews || "現在取得できるトレンド情報はありません。"}
 
 if (
   !containerResponse.ok ||
-  !containerData.id
+  !containerId
 ) {
   console.error(
     "Threads container API error:",
@@ -454,7 +473,7 @@ if (
 
               body: new URLSearchParams({
                 creation_id:
-                  containerData.id,
+                  containerId,
 
                 access_token:
                   profile.threads_access_token,

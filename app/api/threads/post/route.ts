@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
+// 大きな数値IDがJSON数値としてパースされ精度が失われるのを防ぐため、
+// レスポンスの生テキストから "id":"..." または "id":123... を
+// 文字列のまま安全に取り出す
+function extractRawId(rawText: string): string | null {
+  const match = rawText.match(/"id"\s*:\s*"?(\d+)"?/);
+  return match ? match[1] : null;
+}
+
 export async function POST(request: Request) {
   try {
     // ① ログインユーザー取得
@@ -88,11 +96,16 @@ export async function POST(request: Request) {
       }
     );
 
-    const containerData = await containerResponse.json();
+    const containerRawText = await containerResponse.text();
+    const containerData = JSON.parse(containerRawText);
+
+    const containerId =
+      extractRawId(containerRawText) ??
+      (containerData.id != null ? String(containerData.id) : null);
 
     console.log("Threads container response:", containerData);
 
-    if (!containerResponse.ok || !containerData.id) {
+    if (!containerResponse.ok || !containerId) {
       return NextResponse.json(
         {
           error: "Threads投稿の準備に失敗しました。",
@@ -111,7 +124,7 @@ export async function POST(request: Request) {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
-          creation_id: containerData.id,
+          creation_id: containerId,
           access_token: profile.threads_access_token,
         }),
       }

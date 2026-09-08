@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// 大きな数値IDがJSON数値としてパースされ精度が失われるのを防ぐため、
+// レスポンスの生テキストから "id":"..." または "id":123... を
+// 文字列のまま安全に取り出す
+function extractRawId(rawText: string): string | null {
+  const match = rawText.match(/"id"\s*:\s*"?(\d+)"?/);
+  return match ? match[1] : null;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -122,12 +130,16 @@ export async function GET(request: Request) {
       )}`
     );
 
-    const threadsProfile =
-      await profileResponse.json();
+    const profileRawText = await profileResponse.text();
+    const threadsProfile = JSON.parse(profileRawText);
+
+    const threadsUserId =
+      extractRawId(profileRawText) ??
+      (threadsProfile.id != null ? String(threadsProfile.id) : null);
 
     if (
       !profileResponse.ok ||
-      !threadsProfile.id
+      !threadsUserId
     ) {
       console.error(
         "Threads profile error:",
@@ -164,7 +176,7 @@ const { error: upsertError } = await supabase
   .from("profiles")
   .upsert({
     id: userId,  // ← PRIMARY KEY を含める
-    threads_user_id: threadsProfile.id,
+    threads_user_id: threadsUserId,
     threads_username: threadsProfile.username,
     threads_access_token: finalAccessToken,
     threads_token_expires_at: expiresAt,
