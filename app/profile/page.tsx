@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
 
@@ -23,7 +23,46 @@ const router = useRouter();
   });
 
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const user = session?.user;
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(
+          "name, age, job, title, location, bio, experience, skills, goals, topics, products, forbidden_topics, tone"
+        )
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error(error);
+      } else if (data) {
+        setForm((prev) => ({
+          ...prev,
+          ...data,
+          age: data.age != null ? String(data.age) : "",
+          tone: data.tone || prev.tone,
+        }));
+      }
+
+      setLoading(false);
+    };
+
+    loadProfile();
+  }, []);
 
   const updateField = (field: string, value: string) => {
     setForm((prev) => ({
@@ -84,6 +123,10 @@ if (error) {
         </p>
 
         <div className="space-y-6 rounded-2xl border border-border-soft bg-surface p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+
+          {loading && (
+            <p className="text-sm text-text-muted">読み込み中...</p>
+          )}
 
           <Field
             label="名前"

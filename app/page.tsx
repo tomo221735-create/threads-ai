@@ -12,6 +12,9 @@ export default function Home() {
 
   const [posts, setPosts] = useState<string[]>([]);
   const [ideas, setIdeas] = useState<string[]>([]);
+  const [selectedIdeaIndex, setSelectedIdeaIndex] = useState<number | null>(
+    null
+  );
 
   const [loading, setLoading] = useState(false);
   const [ideasLoading, setIdeasLoading] = useState(false);
@@ -168,6 +171,7 @@ useEffect(() => {
     setError("");
     setMessage("");
     setIdeas([]);
+    setSelectedIdeaIndex(null);
     setPosts([]);
 
     try {
@@ -216,9 +220,20 @@ useEffect(() => {
     }
   };
 
-  const generateFromIdea = async (idea: string) => {
+  const selectIdea = (index: number) => {
+    setSelectedIdeaIndex(index);
+  };
+
+  const createPostFromSelectedIdea = async () => {
+    if (selectedIdeaIndex === null) {
+      setError("ネタを選択してください。");
+      return;
+    }
+
+    const idea = ideas[selectedIdeaIndex];
     setTheme(idea);
     setIdeas([]);
+    setSelectedIdeaIndex(null);
 
     await generatePostsWithTheme(idea);
   };
@@ -758,42 +773,61 @@ useEffect(() => {
               </div>
 
               <p className="mt-1 text-sm text-text-muted">
-                あなたのプロフィールと最新情報からAIが選びました。
+                あなたのプロフィールと最新情報からAIが選びました。気に入ったネタを1つ選んでください。
               </p>
             </div>
 
             <div className="space-y-4">
 
-              {ideas.map((idea, index) => (
-                <article
-                  key={index}
-                  className="rounded-2xl border border-border-soft bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:p-6"
-                >
+              {ideas.map((idea, index) => {
+                const isSelected = selectedIdeaIndex === index;
 
-                  <div className="mb-4 flex items-center justify-between">
-                    <span className="rounded-full bg-surface-raised px-3 py-1 text-xs font-bold text-accent-violet">
-                      ネタ {index + 1}
-                    </span>
-                  </div>
-
-                  <div className="whitespace-pre-wrap text-sm leading-7 text-text-primary sm:text-base">
-                    {idea}
-                  </div>
-
-                  <button
-                    onClick={() => generateFromIdea(idea)}
-                    disabled={loading}
-                    className="mt-5 w-full rounded-xl bg-gradient-to-r from-accent-cyan to-accent-violet px-4 py-3.5 text-sm font-bold text-[#06110d] shadow-[0_0_20px_rgba(79,243,208,0.2)] transition active:scale-[0.98] disabled:opacity-50"
+                return (
+                  <article
+                    key={index}
+                    onClick={() => selectIdea(index)}
+                    role="button"
+                    aria-pressed={isSelected}
+                    className={`cursor-pointer rounded-2xl border p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition sm:p-6 ${
+                      isSelected
+                        ? "border-accent-cyan bg-surface-raised shadow-[0_0_0_1px_rgba(79,243,208,0.4)]"
+                        : "border-border-soft bg-surface hover:border-accent-cyan/40"
+                    }`}
                   >
-                    {loading
-                      ? "投稿を作成中..."
-                      : "このネタで投稿を作る →"}
-                  </button>
 
-                </article>
-              ))}
+                    <div className="mb-4 flex items-center justify-between">
+                      <span className="rounded-full bg-surface-raised px-3 py-1 text-xs font-bold text-accent-violet">
+                        ネタ {index + 1}
+                      </span>
+
+                      {isSelected && (
+                        <span className="rounded-full bg-accent-cyan/15 px-3 py-1 text-xs font-bold text-accent-cyan">
+                          ✓ 選択中
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="whitespace-pre-wrap text-sm leading-7 text-text-primary sm:text-base">
+                      {idea}
+                    </div>
+
+                  </article>
+                );
+              })}
 
             </div>
+
+            <button
+              onClick={createPostFromSelectedIdea}
+              disabled={loading || selectedIdeaIndex === null}
+              className="sticky bottom-4 mt-6 w-full rounded-xl bg-gradient-to-r from-accent-cyan to-accent-violet px-5 py-4 text-base font-bold text-[#06110d] shadow-[0_0_24px_rgba(79,243,208,0.3)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading
+                ? "投稿を作成中..."
+                : selectedIdeaIndex === null
+                ? "ネタを選んでください"
+                : `選んだネタで投稿を作る →`}
+            </button>
           </section>
         )}
 
