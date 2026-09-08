@@ -4,6 +4,30 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 
+// AIの出力（【ネタ1】〜【ネタ10】区切り、または「1. 」形式の番号付きリスト）を
+// 1つずつのネタ配列に分割する
+function parseIdeas(rawText: string): string[] {
+  const text = (rawText || "").trim();
+
+  // 「【ネタ1】」のような見出し区切りをまず試す
+  const byHeading = text
+    .split(/\n(?=【\s*ネタ\s*\d+\s*】)/)
+    .map((idea) => idea.replace(/^【\s*ネタ\s*\d+\s*】\s*/, "").trim())
+    .filter(Boolean);
+
+  if (byHeading.length > 1) {
+    return byHeading;
+  }
+
+  // 「1. 」「1．」「1、」のような番号付きリストにフォールバック
+  const byNumber = text
+    .split(/\n(?=\d+[.．、])/)
+    .map((idea) => idea.replace(/^\d+[.．、]\s*/, "").trim())
+    .filter(Boolean);
+
+  return byNumber;
+}
+
 export default function Home() {
   const router = useRouter();
   const [theme, setTheme] = useState("");
@@ -204,12 +228,7 @@ useEffect(() => {
         );
       }
 
-      const generatedIdeas = data.result
-        .split(/\n(?=\d+[.．、])/)
-        .map((idea: string) =>
-          idea.replace(/^\d+[.．、]\s*/, "").trim()
-        )
-        .filter(Boolean);
+      const generatedIdeas = parseIdeas(data.result);
 
       setIdeas(generatedIdeas);
     } catch (err) {
