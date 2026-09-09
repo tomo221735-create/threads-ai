@@ -55,6 +55,26 @@ async function waitForContainerReady(
 // 今さら投稿すると不自然なので「期限切れ」として扱う
 const EXPIRE_AFTER_HOURS = 6;
 
+// 繰り返し設定に応じて次回の投稿日時を計算する
+function calculateNextScheduledAt(
+  scheduledAt: Date,
+  repeatType: string
+): Date | null {
+  const next = new Date(scheduledAt);
+
+  if (repeatType === "daily") {
+    next.setDate(next.getDate() + 1);
+    return next;
+  }
+
+  if (repeatType === "weekly") {
+    next.setDate(next.getDate() + 7);
+    return next;
+  }
+
+  return null;
+}
+
 export async function GET(request: Request) {
   try {
     // =========================
@@ -100,6 +120,31 @@ export async function GET(request: Request) {
 
     const results = [];
 
+    // 繰り返し設定がある予約について、次回分を新しく作成する
+    const scheduleNextOccurrenceIfNeeded = async (
+      current: {
+        user_id: string;
+        content: string;
+        scheduled_at: string;
+        repeat_type: string;
+      }
+    ) => {
+      const nextAt = calculateNextScheduledAt(
+        new Date(current.scheduled_at),
+        current.repeat_type
+      );
+
+      if (!nextAt) return;
+
+      await supabase.from("scheduled_posts").insert({
+        user_id: current.user_id,
+        content: current.content,
+        scheduled_at: nextAt.toISOString(),
+        repeat_type: current.repeat_type,
+        status: "pending",
+      });
+    };
+
     for (const scheduledPost of duePosts ?? []) {
       const postId = scheduledPost.id;
 
@@ -121,6 +166,8 @@ export async function GET(request: Request) {
             })
             .eq("id", postId)
             .eq("status", "pending");
+
+          await scheduleNextOccurrenceIfNeeded(scheduledPost);
 
           results.push({ postId, skipped: "expired" });
           continue;
@@ -237,6 +284,8 @@ export async function GET(request: Request) {
           })
           .eq("id", postId);
 
+        await scheduleNextOccurrenceIfNeeded(claimed);
+
         results.push({ postId, success: true, threadsPostId: publishData.id });
       } catch (error) {
         console.error("Scheduled post error:", error);
@@ -249,6 +298,8 @@ export async function GET(request: Request) {
               error instanceof Error ? error.message : "不明なエラー",
           })
           .eq("id", postId);
+
+        await scheduleNextOccurrenceIfNeeded(scheduledPost);
 
         results.push({
           postId,

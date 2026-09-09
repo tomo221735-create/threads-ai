@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
 
+type RepeatType = "none" | "daily" | "weekly";
+
 type ScheduledPost = {
   id: string;
   content: string;
@@ -11,6 +13,13 @@ type ScheduledPost = {
   status: "pending" | "processing" | "success" | "failed" | "expired";
   post_id: string | null;
   error_message: string | null;
+  repeat_type: RepeatType;
+};
+
+const REPEAT_LABEL: Record<RepeatType, string> = {
+  none: "1回のみ",
+  daily: "毎日繰り返し",
+  weekly: "毎週繰り返し",
 };
 
 const STATUS_LABEL: Record<ScheduledPost["status"], string> = {
@@ -47,8 +56,12 @@ export default function SchedulePage() {
     const d = new Date(Date.now() + 60 * 60 * 1000); // デフォルトは1時間後
     return toDatetimeLocalValue(d);
   });
+  const [repeatType, setRepeatType] = useState<RepeatType>("none");
 
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
+
+  const MAX_PENDING_SCHEDULES = 3;
+  const pendingCount = posts.filter((p) => p.status === "pending").length;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -105,6 +118,13 @@ export default function SchedulePage() {
       return;
     }
 
+    if (pendingCount >= MAX_PENDING_SCHEDULES) {
+      setError(
+        `予約できるのは同時に${MAX_PENDING_SCHEDULES}件までです。既存の予約を取り消してから追加してください。`
+      );
+      return;
+    }
+
     setSaving(true);
 
     const {
@@ -124,6 +144,7 @@ export default function SchedulePage() {
         content: content.trim(),
         scheduled_at: scheduledDate.toISOString(),
         status: "pending",
+        repeat_type: repeatType,
       });
 
     if (insertError) {
@@ -132,6 +153,7 @@ export default function SchedulePage() {
     } else {
       setMessage("予約投稿を作成しました！");
       setContent("");
+      setRepeatType("none");
       await loadPosts();
     }
 
@@ -219,13 +241,43 @@ export default function SchedulePage() {
             />
           </div>
 
+          <div>
+            <label className="mb-2 block font-semibold text-text-primary">
+              繰り返し
+            </label>
+
+            <select
+              value={repeatType}
+              onChange={(e) => setRepeatType(e.target.value as RepeatType)}
+              className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+            >
+              <option value="none">繰り返さない（1回のみ）</option>
+              <option value="daily">毎日、同じ時刻に繰り返す</option>
+              <option value="weekly">毎週、同じ曜日・時刻に繰り返す</option>
+            </select>
+
+            {repeatType !== "none" && (
+              <p className="mt-1 text-xs text-text-muted">
+                同じ内容が、指定した時刻に{repeatType === "daily" ? "毎日" : "毎週"}自動で投稿され続けます。止めたい時は一覧から取り消してください。
+              </p>
+            )}
+          </div>
+
           <button
             onClick={createScheduledPost}
-            disabled={saving}
+            disabled={saving || pendingCount >= MAX_PENDING_SCHEDULES}
             className="w-full rounded-xl bg-gradient-to-r from-accent-cyan to-accent-violet px-5 py-4 font-bold text-[#06110d] shadow-[0_0_20px_rgba(79,243,208,0.25)] transition active:scale-[0.98] disabled:opacity-50"
           >
-            {saving ? "予約中..." : "この内容で予約する"}
+            {saving
+              ? "予約中..."
+              : pendingCount >= MAX_PENDING_SCHEDULES
+              ? `予約は最大${MAX_PENDING_SCHEDULES}件までです`
+              : "この内容で予約する"}
           </button>
+
+          <p className="text-right text-xs text-text-muted">
+            現在の予約中: {pendingCount} / {MAX_PENDING_SCHEDULES}件
+          </p>
 
           {message && (
             <div className="rounded-xl border border-accent-cyan/20 bg-accent-cyan/10 p-4 text-sm text-accent-cyan">
@@ -261,13 +313,21 @@ export default function SchedulePage() {
                       {new Date(post.scheduled_at).toLocaleString("ja-JP")}
                     </span>
 
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${
-                        STATUS_STYLE[post.status]
-                      }`}
-                    >
-                      {STATUS_LABEL[post.status]}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {post.repeat_type !== "none" && (
+                        <span className="rounded-full bg-accent-violet/10 px-3 py-1 text-xs font-bold text-accent-violet">
+                          🔁 {REPEAT_LABEL[post.repeat_type]}
+                        </span>
+                      )}
+
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          STATUS_STYLE[post.status]
+                        }`}
+                      >
+                        {STATUS_LABEL[post.status]}
+                      </span>
+                    </div>
                   </div>
 
                   <p className="whitespace-pre-wrap text-sm text-text-muted">
