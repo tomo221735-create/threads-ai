@@ -251,11 +251,14 @@ export async function GET(request: Request) {
         // 投稿時間チェック
         // =========================
 
-        const scheduledTimes = [
-          setting.post_time_1,
-          setting.post_time_2,
-          setting.post_time_3,
-        ].filter(Boolean);
+        const scheduledTimes: string[] =
+          Array.isArray(setting.post_times) && setting.post_times.length > 0
+            ? setting.post_times.filter(Boolean)
+            : [
+                setting.post_time_1,
+                setting.post_time_2,
+                setting.post_time_3,
+              ].filter(Boolean);
 
         matchedTime = findMatchedTime(
           scheduledTimes,

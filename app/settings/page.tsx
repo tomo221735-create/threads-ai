@@ -8,10 +8,8 @@ export default function SettingsPage() {
   const router = useRouter();
 
   const [enabled, setEnabled] = useState(false);
-  const [postsPerDay, setPostsPerDay] = useState(1);
-  const [postTime1, setPostTime1] = useState("09:00");
-  const [postTime2, setPostTime2] = useState("18:00");
-  const [postTime3, setPostTime3] = useState("21:00");
+  const [postTimes, setPostTimes] = useState<string[]>(["09:00"]);
+  const MAX_POSTS_PER_DAY = 5;
 
   const [purpose, setPurpose] = useState("フォロワーを増やす");
   const [autoTrend, setAutoTrend] = useState(true);
@@ -50,10 +48,24 @@ export default function SettingsPage() {
 
     if (data) {
       setEnabled(data.enabled ?? false);
-      setPostsPerDay(data.posts_per_day ?? 1);
-      setPostTime1(data.post_time_1?.slice(0, 5) ?? "09:00");
-      setPostTime2(data.post_time_2?.slice(0, 5) ?? "18:00");
-      setPostTime3(data.post_time_3?.slice(0, 5) ?? "21:00");
+
+      if (Array.isArray(data.post_times) && data.post_times.length > 0) {
+        setPostTimes(
+          data.post_times.map((t: string) => t.slice(0, 5))
+        );
+      } else {
+        // 移行前の古いデータ（post_time_1〜3）からのフォールバック
+        const legacyTimes = [
+          data.post_time_1,
+          data.post_time_2,
+          data.post_time_3,
+        ]
+          .filter(Boolean)
+          .map((t: string) => t.slice(0, 5));
+
+        setPostTimes(legacyTimes.length > 0 ? legacyTimes : ["09:00"]);
+      }
+
       setPurpose(data.purpose ?? "フォロワーを増やす");
       setAutoTrend(data.auto_trend ?? true);
     }
@@ -82,10 +94,8 @@ const { error } = await supabase
     {
       user_id: user.id,
       enabled,
-      posts_per_day: postsPerDay,
-      post_time_1: postsPerDay >= 1 ? postTime1 : null,
-      post_time_2: postsPerDay >= 2 ? postTime2 : null,
-      post_time_3: postsPerDay >= 3 ? postTime3 : null,
+      posts_per_day: postTimes.length,
+      post_times: postTimes,
       purpose,
       auto_trend: autoTrend,
       updated_at: new Date().toISOString(),
@@ -106,6 +116,31 @@ if (error) {
 }
 
 setSaving(false);
+  };
+
+  const addPostTime = () => {
+    if (postTimes.length >= MAX_POSTS_PER_DAY) return;
+
+    // 前の時間の2時間後くらいをデフォルト値にしておく
+    const last = postTimes[postTimes.length - 1] ?? "09:00";
+    const [h, m] = last.split(":").map(Number);
+    const nextHour = (h + 2) % 24;
+    const suggested = `${String(nextHour).padStart(2, "0")}:${String(
+      m
+    ).padStart(2, "0")}`;
+
+    setPostTimes([...postTimes, suggested]);
+  };
+
+  const removePostTime = (index: number) => {
+    if (postTimes.length <= 1) return;
+    setPostTimes(postTimes.filter((_, i) => i !== index));
+  };
+
+  const updatePostTime = (index: number, value: string) => {
+    setPostTimes(
+      postTimes.map((t, i) => (i === index ? value : t))
+    );
   };
 
   if (loading) {
@@ -160,85 +195,58 @@ setSaving(false);
             </button>
           </div>
 
-          {/* 投稿数 */}
-          <div>
-            <label className="mb-2 block font-semibold text-text-primary">
-              1日の投稿数
-            </label>
-
-            <select
-              value={postsPerDay}
-              onChange={(e) =>
-                setPostsPerDay(Number(e.target.value))
-              }
-              className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
-            >
-              <option value={1}>1日1投稿</option>
-              <option value={2}>1日2投稿</option>
-              <option value={3}>1日3投稿</option>
-            </select>
-          </div>
-
           {/* 投稿時間 */}
           <div>
-            <label className="mb-3 block font-semibold text-text-primary">
-              投稿時間
-            </label>
+            <div className="mb-3 flex items-center justify-between">
+              <label className="block font-semibold text-text-primary">
+                投稿時間（1日{postTimes.length}回）
+              </label>
+
+              <button
+                type="button"
+                onClick={addPostTime}
+                disabled={postTimes.length >= MAX_POSTS_PER_DAY}
+                className="text-sm font-bold text-accent-cyan transition disabled:cursor-not-allowed disabled:text-text-muted"
+              >
+                ＋ 時間を追加
+              </button>
+            </div>
 
             <div className="space-y-3">
 
-              {postsPerDay >= 1 && (
-                <div>
-                  <label className="text-sm text-text-muted">
-                    1回目
-                  </label>
+              {postTimes.map((time, index) => (
+                <div key={index} className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="text-sm text-text-muted">
+                      {index + 1}回目
+                    </label>
 
-                  <input
-                    type="time"
-                    value={postTime1}
-                    onChange={(e) =>
-                      setPostTime1(e.target.value)
-                    }
-                    className="mt-1 w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50 [color-scheme:dark]"
-                  />
+                    <input
+                      type="time"
+                      value={time}
+                      onChange={(e) =>
+                        updatePostTime(index, e.target.value)
+                      }
+                      className="mt-1 w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50 [color-scheme:dark]"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => removePostTime(index)}
+                    disabled={postTimes.length <= 1}
+                    className="mb-1 rounded-xl border border-border-soft px-3 py-3 text-sm text-text-muted transition hover:border-red-400/50 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    削除
+                  </button>
                 </div>
-              )}
-
-              {postsPerDay >= 2 && (
-                <div>
-                  <label className="text-sm text-text-muted">
-                    2回目
-                  </label>
-
-                  <input
-                    type="time"
-                    value={postTime2}
-                    onChange={(e) =>
-                      setPostTime2(e.target.value)
-                    }
-                    className="mt-1 w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50 [color-scheme:dark]"
-                  />
-                </div>
-              )}
-
-              {postsPerDay >= 3 && (
-                <div>
-                  <label className="text-sm text-text-muted">
-                    3回目
-                  </label>
-
-                  <input
-                    type="time"
-                    value={postTime3}
-                    onChange={(e) =>
-                      setPostTime3(e.target.value)
-                    }
-                    className="mt-1 w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50 [color-scheme:dark]"
-                  />
-                </div>
-              )}
+              ))}
 
             </div>
+
+            <p className="mt-2 text-xs text-text-muted">
+              最大{MAX_POSTS_PER_DAY}回まで設定できます。
+            </p>
           </div>
 
           {/* 目的 */}
