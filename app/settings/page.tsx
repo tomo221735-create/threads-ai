@@ -10,6 +10,27 @@ export default function SettingsPage() {
   const [enabled, setEnabled] = useState(false);
   const [postTimes, setPostTimes] = useState<string[]>(["09:00"]);
   const MAX_POSTS_PER_DAY = 5;
+  const TIME_STEP_MINUTES = 15;
+
+  // 「HH:MM」を15分単位（00 / 15 / 30 / 45）に丸める
+  const snapToStep = (value: string) => {
+    const [hStr, mStr] = value.split(":");
+    const h = Number(hStr);
+    const m = Number(mStr);
+
+    if (Number.isNaN(h) || Number.isNaN(m)) return value;
+
+    const snappedMinutes =
+      Math.round(m / TIME_STEP_MINUTES) * TIME_STEP_MINUTES;
+
+    // 60分に丸まった場合は繰り上げ
+    const finalHour = snappedMinutes === 60 ? (h + 1) % 24 : h;
+    const finalMinute = snappedMinutes === 60 ? 0 : snappedMinutes;
+
+    return `${String(finalHour).padStart(2, "0")}:${String(
+      finalMinute
+    ).padStart(2, "0")}`;
+  };
 
   const [purpose, setPurpose] = useState("フォロワーを増やす");
   const [autoTrend, setAutoTrend] = useState(true);
@@ -51,7 +72,7 @@ export default function SettingsPage() {
 
       if (Array.isArray(data.post_times) && data.post_times.length > 0) {
         setPostTimes(
-          data.post_times.map((t: string) => t.slice(0, 5))
+          data.post_times.map((t: string) => snapToStep(t.slice(0, 5)))
         );
       } else {
         // 移行前の古いデータ（post_time_1〜3）からのフォールバック
@@ -61,7 +82,7 @@ export default function SettingsPage() {
           data.post_time_3,
         ]
           .filter(Boolean)
-          .map((t: string) => t.slice(0, 5));
+          .map((t: string) => snapToStep(t.slice(0, 5)));
 
         setPostTimes(legacyTimes.length > 0 ? legacyTimes : ["09:00"]);
       }
@@ -138,8 +159,10 @@ setSaving(false);
   };
 
   const updatePostTime = (index: number, value: string) => {
+    const snapped = snapToStep(value);
+
     setPostTimes(
-      postTimes.map((t, i) => (i === index ? value : t))
+      postTimes.map((t, i) => (i === index ? snapped : t))
     );
   };
 
@@ -223,6 +246,7 @@ setSaving(false);
 
                     <input
                       type="time"
+                      step={TIME_STEP_MINUTES * 60}
                       value={time}
                       onChange={(e) =>
                         updatePostTime(index, e.target.value)
@@ -245,7 +269,7 @@ setSaving(false);
             </div>
 
             <p className="mt-2 text-xs text-text-muted">
-              最大{MAX_POSTS_PER_DAY}回まで設定できます。
+              最大{MAX_POSTS_PER_DAY}回まで、15分単位（00 / 15 / 30 / 45分）で設定できます。
             </p>
           </div>
 
