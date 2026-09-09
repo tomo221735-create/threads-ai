@@ -7,9 +7,13 @@ const openai = new OpenAI({
 });
 
 // RSSからニュースを取得する関数
-async function getNews(query: string, limit = 8) {
+// windowDays: Googleニュースの検索を直近何日以内の記事に絞るか（未指定時は絞らない）
+async function getNews(query: string, limit = 8, windowDays?: number) {
+  const searchQuery =
+    windowDays != null ? `${query} when:${windowDays}d` : query;
+
   const url =
-    `https://news.google.com/rss/search?q=${encodeURIComponent(query)}` +
+    `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}` +
     `&hl=ja&gl=JP&ceid=JP:ja`;
 
   const response = await fetch(url, {
@@ -22,8 +26,12 @@ async function getNews(query: string, limit = 8) {
 
   const xml = await response.text();
 
-  return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)]
-    .slice(0, limit)
+  const cutoff =
+    windowDays != null
+      ? Date.now() - windowDays * 24 * 60 * 60 * 1000
+      : null;
+
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)]
     .map((match) => {
       const item = match[1];
 
@@ -33,11 +41,38 @@ async function getNews(query: string, limit = 8) {
       const link =
         item.match(/<link>([\s\S]*?)<\/link>/)?.[1] || "";
 
+      const pubDateStr =
+        item.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || "";
+
+      const pubDate = pubDateStr ? new Date(pubDateStr) : null;
+
       return {
         title: title.replace(/<!\[CDATA\[|\]\]>/g, ""),
         link,
+        pubDate,
       };
-    });
+    })
+    // Googleニュースの when: 演算子だけでは古い記事（常設イベント案内など）が
+    // 紛れ込むことがあるため、pubDate でも二重にフィルタする
+    .filter((item) => {
+      if (!cutoff) return true;
+      if (!item.pubDate || Number.isNaN(item.pubDate.getTime())) return false;
+      return item.pubDate.getTime() >= cutoff;
+    })
+    // 新しい記事を優先
+    .sort((a, b) => {
+      const at = a.pubDate?.getTime() ?? 0;
+      const bt = b.pubDate?.getTime() ?? 0;
+      return bt - at;
+    })
+    .slice(0, limit)
+    .map(({ title, link, pubDate }) => ({
+      title,
+      link,
+      publishedAt: pubDate ? pubDate.toISOString().slice(0, 10) : null,
+    }));
+
+  return items;
 }
 
 export async function POST(request: Request) {
@@ -102,7 +137,8 @@ export async function POST(request: Request) {
 
     const localNews = await getNews(
       `${location} ニュース`,
-      8
+      8,
+      3
     );
 
     // -----------------------------
@@ -111,7 +147,8 @@ export async function POST(request: Request) {
 
     const nationalNews = await getNews(
       "日本 最新ニュース",
-      8
+      8,
+      1
     );
 
     // -----------------------------
@@ -129,16 +166,21 @@ export async function POST(request: Request) {
 
     const industryNews = await getNews(
       industryQuery || "ビジネス ニュース",
-      8
+      8,
+      3
     );
 
     // -----------------------------
     // ⑥ イベント情報
     // -----------------------------
+    // 「開催予定」を付けて、常設スポットの紹介記事ではなく
+    // 開催告知に近い記事を優先させる。windowDays も短めにして
+    // 過去の開催レポートが混ざらないようにする。
 
     const eventNews = await getNews(
-      `${location} イベント`,
-      8
+      `${location} イベント 開催`,
+      8,
+      7
     );
 
     // -----------------------------
@@ -147,7 +189,8 @@ export async function POST(request: Request) {
 
     const trendingNews = await getNews(
       "話題 トレンド 日本",
-      8
+      8,
+      1
     );
 
     // -----------------------------
@@ -235,8 +278,8 @@ ${profile.analysis_summary || "まだ分析されていません。"}
 ====================
 
 ${localNews
-  .map((item, i) => `${i + 1}. ${item.title}`)
-  .join("\n")}
+  .map((item, i) => `${i + 1}. [${item.publishedAt ?? "日付不明"}] ${item.title}`)
+  .join("\n") || "（該当する最新ニュースなし）"}
 
 
 ====================
@@ -244,8 +287,8 @@ ${localNews
 ====================
 
 ${nationalNews
-  .map((item, i) => `${i + 1}. ${item.title}`)
-  .join("\n")}
+  .map((item, i) => `${i + 1}. [${item.publishedAt ?? "日付不明"}] ${item.title}`)
+  .join("\n") || "（該当する最新ニュースなし）"}
 
 
 ====================
@@ -253,17 +296,18 @@ ${nationalNews
 ====================
 
 ${industryNews
-  .map((item, i) => `${i + 1}. ${item.title}`)
-  .join("\n")}
+  .map((item, i) => `${i + 1}. [${item.publishedAt ?? "日付不明"}] ${item.title}`)
+  .join("\n") || "（該当する最新ニュースなし）"}
 
 
 ====================
-【地域イベント】
+【地域イベント（開催告知）】
 ====================
+※日付は記事の配信日。過去に終了済みと思われるイベントはネタにしないこと。
 
 ${eventNews
-  .map((item, i) => `${i + 1}. ${item.title}`)
-  .join("\n")}
+  .map((item, i) => `${i + 1}. [${item.publishedAt ?? "日付不明"}] ${item.title}`)
+  .join("\n") || "（該当する最新イベントなし）"}
 
 
 ====================
@@ -271,8 +315,8 @@ ${eventNews
 ====================
 
 ${trendingNews
-  .map((item, i) => `${i + 1}. ${item.title}`)
-  .join("\n")}
+  .map((item, i) => `${i + 1}. [${item.publishedAt ?? "日付不明"}] ${item.title}`)
+  .join("\n") || "（該当する最新トレンドなし）"}
 
 
 ====================
@@ -311,6 +355,7 @@ ${trendingNews
 - ユーザーが経験していないことを事実として書かない
 - 存在しないイベントを作らない
 - 存在しないニュースを作らない
+- 配信日が古い、またはすでに終了していると考えられるイベント・ニュースはネタにしない
 - 無理やり地域ニュースと結びつけない
 - 無理やりトレンドと結びつけない
 - 宣伝だけのネタにしない
