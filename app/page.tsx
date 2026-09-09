@@ -465,6 +465,13 @@ useEffect(() => {
               </button>
 
               <button
+                onClick={() => router.push("/schedule")}
+                className="rounded-full border border-border-soft bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary shadow-sm transition hover:border-accent-violet/40 active:scale-[0.98]"
+              >
+                🗓️ 予約投稿
+              </button>
+
+              <button
                 onClick={() => router.push("/settings")}
                 className="rounded-full border border-border-soft bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary shadow-sm transition hover:border-accent-cyan/40 active:scale-[0.98]"
               >
