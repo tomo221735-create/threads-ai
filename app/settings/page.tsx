@@ -12,7 +12,14 @@ export default function SettingsPage() {
   const MAX_POSTS_PER_DAY = 5;
   const TIME_STEP_MINUTES = 15;
 
+  const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) =>
+    String(i).padStart(2, "0")
+  );
+
+  const MINUTE_OPTIONS = ["00", "15", "30", "45"];
+
   // 「HH:MM」を15分単位（00 / 15 / 30 / 45）に丸める
+  // （ドロップダウン導入前の古い保存データ用）
   const snapToStep = (value: string) => {
     const [hStr, mStr] = value.split(":");
     const h = Number(hStr);
@@ -244,15 +251,43 @@ setSaving(false);
                       {index + 1}回目
                     </label>
 
-                    <input
-                      type="time"
-                      step={TIME_STEP_MINUTES * 60}
-                      value={time}
-                      onChange={(e) =>
-                        updatePostTime(index, e.target.value)
-                      }
-                      className="mt-1 w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50 [color-scheme:dark]"
-                    />
+                    <div className="mt-1 flex items-center gap-2">
+                      <select
+                        value={time.split(":")[0]}
+                        onChange={(e) =>
+                          updatePostTime(
+                            index,
+                            `${e.target.value}:${time.split(":")[1]}`
+                          )
+                        }
+                        className="flex-1 rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+                      >
+                        {HOUR_OPTIONS.map((h) => (
+                          <option key={h} value={h}>
+                            {h}
+                          </option>
+                        ))}
+                      </select>
+
+                      <span className="text-text-muted">:</span>
+
+                      <select
+                        value={time.split(":")[1]}
+                        onChange={(e) =>
+                          updatePostTime(
+                            index,
+                            `${time.split(":")[0]}:${e.target.value}`
+                          )
+                        }
+                        className="flex-1 rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+                      >
+                        {MINUTE_OPTIONS.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   <button
