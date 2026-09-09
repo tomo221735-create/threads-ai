@@ -14,6 +14,7 @@ type ScheduledPost = {
   post_id: string | null;
   error_message: string | null;
   repeat_type: RepeatType;
+  repeat_days: number[] | null;
 };
 
 const REPEAT_LABEL: Record<RepeatType, string> = {
@@ -21,6 +22,17 @@ const REPEAT_LABEL: Record<RepeatType, string> = {
   daily: "毎日繰り返し",
   weekly: "毎週繰り返し",
 };
+
+const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+
+function formatRepeatDays(days: number[] | null | undefined) {
+  if (!days || days.length === 0) return "";
+
+  return [...days]
+    .sort((a, b) => a - b)
+    .map((d) => WEEKDAY_LABELS[d])
+    .join("・");
+}
 
 const STATUS_LABEL: Record<ScheduledPost["status"], string> = {
   pending: "予約中",
@@ -57,6 +69,15 @@ export default function SchedulePage() {
     return toDatetimeLocalValue(d);
   });
   const [repeatType, setRepeatType] = useState<RepeatType>("none");
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
+
+  const toggleRepeatDay = (day: number) => {
+    setRepeatDays((prev) =>
+      prev.includes(day)
+        ? prev.filter((d) => d !== day)
+        : [...prev, day].sort((a, b) => a - b)
+    );
+  };
 
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
 
@@ -125,6 +146,11 @@ export default function SchedulePage() {
       return;
     }
 
+    if (repeatType === "weekly" && repeatDays.length === 0) {
+      setError("繰り返す曜日を1つ以上選択してください。");
+      return;
+    }
+
     setSaving(true);
 
     const {
@@ -145,6 +171,7 @@ export default function SchedulePage() {
         scheduled_at: scheduledDate.toISOString(),
         status: "pending",
         repeat_type: repeatType,
+        repeat_days: repeatType === "weekly" ? repeatDays : null,
       });
 
     if (insertError) {
@@ -154,6 +181,7 @@ export default function SchedulePage() {
       setMessage("予約投稿を作成しました！");
       setContent("");
       setRepeatType("none");
+      setRepeatDays([]);
       await loadPosts();
     }
 
@@ -256,10 +284,45 @@ export default function SchedulePage() {
               <option value="weekly">毎週、同じ曜日・時刻に繰り返す</option>
             </select>
 
-            {repeatType !== "none" && (
+            {repeatType !== "none" && repeatType !== "weekly" && (
               <p className="mt-1 text-xs text-text-muted">
-                同じ内容が、指定した時刻に{repeatType === "daily" ? "毎日" : "毎週"}自動で投稿され続けます。止めたい時は一覧から取り消してください。
+                同じ内容が、指定した時刻に毎日自動で投稿され続けます。止めたい時は一覧から取り消してください。
               </p>
+            )}
+
+            {repeatType === "weekly" && (
+              <div className="mt-3">
+                <p className="mb-2 text-xs text-text-muted">
+                  繰り返す曜日を選択してください（複数選択可）
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  {WEEKDAY_LABELS.map((label, day) => {
+                    const isSelected = repeatDays.includes(day);
+
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => toggleRepeatDay(day)}
+                        className={`h-10 w-10 rounded-full text-sm font-bold transition ${
+                          isSelected
+                            ? "bg-accent-cyan text-[#06110d] shadow-[0_0_12px_rgba(79,243,208,0.35)]"
+                            : "border border-border-soft bg-surface-raised text-text-muted"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {repeatDays.length > 0 && (
+                  <p className="mt-2 text-xs text-text-muted">
+                    毎週 {formatRepeatDays(repeatDays)}曜日 に自動で投稿され続けます。止めたい時は一覧から取り消してください。
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
@@ -316,7 +379,12 @@ export default function SchedulePage() {
                     <div className="flex items-center gap-2">
                       {post.repeat_type !== "none" && (
                         <span className="rounded-full bg-accent-violet/10 px-3 py-1 text-xs font-bold text-accent-violet">
-                          🔁 {REPEAT_LABEL[post.repeat_type]}
+                          🔁{" "}
+                          {post.repeat_type === "weekly" &&
+                          post.repeat_days &&
+                          post.repeat_days.length > 0
+                            ? `毎週${formatRepeatDays(post.repeat_days)}曜`
+                            : REPEAT_LABEL[post.repeat_type]}
                         </span>
                       )}
 
