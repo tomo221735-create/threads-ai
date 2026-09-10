@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { createCustomerSession } from "@/lib/komoju";
-import { isPayablePlan } from "@/lib/plans";
+import { createSubscriptionCheckoutSession } from "@/lib/stripe";
+import { isPayablePlan, PLANS } from "@/lib/plans";
 
 export async function POST(request: Request) {
   try {
@@ -44,14 +44,20 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // ③ customer-modeセッションを新規発行
-    //    （カード情報の入力・保存はKOMOJUのホストされたページで行うため、
-    //     カード番号が自社サーバーを通過することはない＝PCI-DSSの対象範囲を最小化できる）
-    const returnUrl = `${appUrl}/api/billing/return`;
+    const planDef = PLANS[plan];
 
-    const session = await createCustomerSession({
-      returnUrl,
+    // ③ Stripe Checkout Session（subscriptionモード）を新規発行
+    //    （カード情報の入力・保存はStripeのホストされたページで行うため、
+    //     カード番号が自社サーバーを通過することはない＝PCI-DSSの対象範囲を最小化できる）
+    const successUrl = `${appUrl}/api/billing/return?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${appUrl}/billing?cancelled=1`;
+
+    const session = await createSubscriptionCheckoutSession({
+      successUrl,
+      cancelUrl,
       email: user.email ?? undefined,
+      planName: planDef.name,
+      amount: planDef.price,
       metadata: {
         user_id: user.id,
         plan,
@@ -76,9 +82,17 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!session.url) {
+      console.error("checkout session has no url:", session.id);
+      return NextResponse.json(
+        { error: "決済セッションの作成に失敗しました。" },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      checkoutUrl: session.session_url,
+      checkoutUrl: session.url,
     });
   } catch (err) {
     console.error("checkout error:", err);

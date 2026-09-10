@@ -103,7 +103,7 @@ function BillingPageInner() {
         return;
       }
 
-      // KOMOJUのホスト決済ページ（外部ドメイン）へ遷移するため window.location を使用
+      // Stripeのホスト決済ページ（外部ドメイン）へ遷移するため window.location を使用
       window.location.href = json.checkoutUrl;
     } catch (e) {
       console.error(e);
@@ -163,7 +163,7 @@ function BillingPageInner() {
 
         <h1 className="text-3xl font-bold text-text-primary">プラン・お支払い</h1>
         <p className="mt-2 text-text-muted">
-          プランはいつでも変更・解約できます。決済はKOMOJUで安全に処理されます。
+          プランはいつでも変更・解約できます。決済はStripeで安全に処理されます。
         </p>
 
         {message && (

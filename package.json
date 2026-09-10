@@ -14,8 +14,11 @@
     "fast-xml-parser": "^5.11.1",
     "next": "16.3.3",
     "openai": "^7.8.0",
+    "stripe": "^18.5.0",
     "react": "19.2.8",
+
     "react-dom": "19.2.8"
+
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
