@@ -1,79 +1,11 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getNews } from "@/lib/news";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-// RSSからニュースを取得する関数
-// windowDays: Googleニュースの検索を直近何日以内の記事に絞るか（未指定時は絞らない）
-async function getNews(query: string, limit = 8, windowDays?: number) {
-  const searchQuery =
-    windowDays != null ? `${query} when:${windowDays}d` : query;
-
-  const url =
-    `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}` +
-    `&hl=ja&gl=JP&ceid=JP:ja`;
-
-  const response = await fetch(url, {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    return [];
-  }
-
-  const xml = await response.text();
-
-  const cutoff =
-    windowDays != null
-      ? Date.now() - windowDays * 24 * 60 * 60 * 1000
-      : null;
-
-  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)]
-    .map((match) => {
-      const item = match[1];
-
-      const title =
-        item.match(/<title>([\s\S]*?)<\/title>/)?.[1] || "";
-
-      const link =
-        item.match(/<link>([\s\S]*?)<\/link>/)?.[1] || "";
-
-      const pubDateStr =
-        item.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || "";
-
-      const pubDate = pubDateStr ? new Date(pubDateStr) : null;
-
-      return {
-        title: title.replace(/<!\[CDATA\[|\]\]>/g, ""),
-        link,
-        pubDate,
-      };
-    })
-    // Googleニュースの when: 演算子だけでは古い記事（常設イベント案内など）が
-    // 紛れ込むことがあるため、pubDate でも二重にフィルタする
-    .filter((item) => {
-      if (!cutoff) return true;
-      if (!item.pubDate || Number.isNaN(item.pubDate.getTime())) return false;
-      return item.pubDate.getTime() >= cutoff;
-    })
-    // 新しい記事を優先
-    .sort((a, b) => {
-      const at = a.pubDate?.getTime() ?? 0;
-      const bt = b.pubDate?.getTime() ?? 0;
-      return bt - at;
-    })
-    .slice(0, limit)
-    .map(({ title, link, pubDate }) => ({
-      title,
-      link,
-      publishedAt: pubDate ? pubDate.toISOString().slice(0, 10) : null,
-    }));
-
-  return items;
-}
 
 export async function POST(request: Request) {
   try {
@@ -274,6 +206,14 @@ ${profile.analysis_summary || "まだ分析されていません。"}
 
 
 ====================
+【今、同じジャンルで効いている切り口（Web記事ベース・参考情報）】
+====================
+※あくまで参考。この通りに書く必要はなく、ユーザー自身の言葉・経験に落とし込むこと。
+
+${profile.genre_trend_summary || "まだ分析されていません。"}
+
+
+====================
 【地域ニュース】
 ====================
 
@@ -345,6 +285,8 @@ ${trendingNews
 
 10. ユーザーからの自由な要望がある場合は、それを最優先で反映する
 
+11. 「今、同じジャンルで効いている切り口」を参考にできるか（コピーではなく、着想として）
+
 
 ====================
 【禁止事項】
@@ -356,6 +298,7 @@ ${trendingNews
 - 存在しないイベントを作らない
 - 存在しないニュースを作らない
 - 配信日が古い、またはすでに終了していると考えられるイベント・ニュースはネタにしない
+- 「今効いている切り口」の文章をそのままコピーしない。必ずユーザー自身の言葉・経験に書き換える
 - 無理やり地域ニュースと結びつけない
 - 無理やりトレンドと結びつけない
 - 宣伝だけのネタにしない
@@ -376,7 +319,7 @@ ${trendingNews
 一言でいうと：
 
 関連する情報：
-（地域ニュース / 全国ニュース / 業界ニュース / イベント / トレンド のどれか）
+（地域ニュース / 全国ニュース / 業界ニュース / イベント / トレンド / ジャンルの切り口 のどれか）
 
 投稿の切り口：
 実際にThreadsで何を話すのか。
