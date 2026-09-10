@@ -89,13 +89,24 @@ export async function GET() {
       if (Number.isNaN(date.getTime())) continue;
 
       // JSTの時（0〜23）を取り出す
-      const hour = Number(
-        new Intl.DateTimeFormat("ja-JP", {
-          timeZone: "Asia/Tokyo",
-          hour: "2-digit",
-          hour12: false,
-        }).format(date)
-      );
+      // 注意: Intl.DateTimeFormatは"ja-JP"ロケールだと環境によって
+      // "14時"のように単位付きの文字列を返すことがあり、そのままNumber()に
+      // 通すとNaNになる。"en-US"＋formatToPartsで数値だけを安全に取り出す。
+      const hourPart = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Tokyo",
+        hour: "2-digit",
+        hour12: false,
+      })
+        .formatToParts(date)
+        .find((part) => part.type === "hour")?.value;
+
+      if (hourPart == null) continue;
+
+      // hour12:falseでも実装によっては深夜0時が"24"として返ることがあるため、
+      // 24は0に丸める
+      const hour = Number(hourPart) % 24;
+
+      if (Number.isNaN(hour)) continue;
 
       const bucket = buckets.get(hour) ?? {
         count: 0,
