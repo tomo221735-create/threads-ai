@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getAnalyticsAccess } from "@/lib/plan-guard";
 
 type ThreadsPostRow = {
   posted_at: string | null;
@@ -48,6 +49,21 @@ export async function GET() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    // ②' プランチェック（PRO=フル表示 / STARTER=モザイク表示用にデータは返す / FREE=非表示）
+    const { plan, access } = await getAnalyticsAccess(supabase, user.id);
+
+    if (access === "locked") {
+      return NextResponse.json({
+        success: true,
+        hasEnoughData: false,
+        access,
+        plan,
+        message: "おすすめの投稿時間帯はPROプラン限定機能です。",
+        buckets: [],
+        recommended: [],
+      });
+    }
+
     const { data: rows, error: fetchError } = await supabase
       .from("threads_posts")
       .select("posted_at, likes, replies, reposts, quotes, views, engagement_score")
@@ -69,6 +85,8 @@ export async function GET() {
       return NextResponse.json({
         success: true,
         hasEnoughData: false,
+        access,
+        plan,
         message:
           "まだ分析できる投稿データがありません。「投稿を分析」を実行してから確認してください。",
         buckets: [],
@@ -96,17 +114,21 @@ export async function GET() {
         timeZone: "Asia/Tokyo",
         hour: "2-digit",
         hour12: false,
+        // hour12:falseだけだと実装によってはAM/PMサイクルの影響が残ることがあるため、
+        // hourCycleを明示して0〜23の24時間表記に固定する
+        hourCycle: "h23",
       })
         .formatToParts(date)
         .find((part) => part.type === "hour")?.value;
 
       if (hourPart == null) continue;
 
-      // hour12:falseでも実装によっては深夜0時が"24"として返ることがあるため、
-      // 24は0に丸める
+      // hourCycle:"h23"を指定していても環境差で"24"が返るケースに備え、24は0に丸める
       const hour = Number(hourPart) % 24;
 
-      if (Number.isNaN(hour)) continue;
+      // Number()の変換失敗（NaN）に加え、0〜23の範囲外になる値は
+      // 「おすすめの投稿時間帯」に "NaN:00" のような不正な表示が出ないよう除外する
+      if (!Number.isInteger(hour) || hour < 0 || hour > 23) continue;
 
       const bucket = buckets.get(hour) ?? {
         count: 0,
@@ -129,6 +151,8 @@ export async function GET() {
       return NextResponse.json({
         success: true,
         hasEnoughData: false,
+        access,
+        plan,
         message:
           "投稿の時刻データが取得できませんでした。もう一度「投稿を分析」を実行してください。",
         buckets: [],
@@ -159,6 +183,8 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       hasEnoughData: true,
+      access,
+      plan,
       lowConfidence,
       totalPosts,
       minSampleForConfidence: MIN_SAMPLE_FOR_CONFIDENCE,

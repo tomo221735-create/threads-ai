@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getAnalyticsAccess } from "@/lib/plan-guard";
 
 type ThreadsPostRow = {
   posted_at: string | null;
@@ -62,6 +63,21 @@ export async function GET() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    // ②' プランチェック（PRO=フル表示 / STARTER=モザイク表示用にデータは返す / FREE=非表示）
+    const { plan, access } = await getAnalyticsAccess(supabase, user.id);
+
+    if (access === "locked") {
+      return NextResponse.json({
+        success: true,
+        hasEnoughData: false,
+        access,
+        plan,
+        message: "パフォーマンスの推移グラフはPROプラン限定機能です。",
+        weekly: [],
+        overall: null,
+      });
+    }
+
     const { data: rows, error: fetchError } = await supabase
       .from("threads_posts")
       .select("posted_at, likes, replies, reposts, views, engagement_score")
@@ -84,6 +100,8 @@ export async function GET() {
       return NextResponse.json({
         success: true,
         hasEnoughData: false,
+        access,
+        plan,
         message:
           "まだ分析できる投稿データがありません。「投稿を分析」を実行してから確認してください。",
         weekly: [],
@@ -161,6 +179,8 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       hasEnoughData: true,
+      access,
+      plan,
       weekly,
       overall,
     });

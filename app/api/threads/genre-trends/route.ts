@@ -3,10 +3,69 @@ import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getNews } from "@/lib/news";
+import { getAnalyticsAccess } from "@/lib/plan-guard";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// 画面表示用：保存済みのジャンルトレンド要約とプラン別アクセスレベルを返す。
+// STARTERはモザイク表示のため中身（summary）自体は返す。FREEは中身を返さない。
+export async function GET() {
+  try {
+    const supabaseAuth = await createSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseAuth.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: "ログインしてください。" },
+        { status: 401 }
+      );
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { plan, access } = await getAnalyticsAccess(supabase, user.id);
+
+    if (access === "locked") {
+      return NextResponse.json({
+        success: true,
+        access,
+        plan,
+        summary: null,
+        updatedAt: null,
+      });
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("genre_trend_summary, genre_trend_updated_at")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    return NextResponse.json({
+      success: true,
+      access,
+      plan,
+      summary: profile?.genre_trend_summary ?? null,
+      updatedAt: profile?.genre_trend_updated_at ?? null,
+    });
+  } catch (error) {
+    console.error("genre-trends GET error:", error);
+
+    return NextResponse.json(
+      { error: "ジャンルトレンドの取得中にエラーが発生しました。" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST() {
   try {
@@ -30,6 +89,20 @@ export async function POST() {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
+
+    // ②' プランチェック（この先はOpenAI課金が発生するため、生成自体はPRO限定）
+    const { plan, access } = await getAnalyticsAccess(supabase, user.id);
+
+    if (access !== "full") {
+      return NextResponse.json(
+        {
+          error: "同ジャンルの人気投稿リサーチはPROプラン限定機能です。",
+          access,
+          plan,
+        },
+        { status: 403 }
+      );
+    }
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
@@ -119,6 +192,8 @@ ${allTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}
 
     return NextResponse.json({
       success: true,
+      access,
+      plan,
       summary,
       sources: {
         topicNews,
