@@ -1,9 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PLANS, PlanId, PAYABLE_PLAN_IDS } from "../../lib/plans";
+import { PLANS, PlanId, PAYABLE_PLAN_IDS } from "@/lib/plans";
 
 type ProfileBilling = {
   plan: PlanId;
