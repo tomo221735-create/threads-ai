@@ -32,7 +32,7 @@ export async function GET() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { plan, access } = await getAnalyticsAccess(supabase, user.id);
+const { plan, access } = await getAnalyticsAccess(supabase, user.id, user.email);
 
     if (access === "locked") {
       return NextResponse.json({
@@ -91,7 +91,7 @@ export async function POST() {
     );
 
     // ②' プランチェック（この先はOpenAI課金が発生するため、生成自体はPRO限定）
-    const { plan, access } = await getAnalyticsAccess(supabase, user.id);
+const { plan, access } = await getAnalyticsAccess(supabase, user.id, user.email);
 
     if (access !== "full") {
       return NextResponse.json(
