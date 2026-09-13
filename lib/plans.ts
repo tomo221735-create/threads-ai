@@ -1,5 +1,5 @@
 // プラン定義（フロント・API 共通）
-// 金額は税込・円（KOMOJU の amount は最小単位＝円をそのまま渡せばOK）
+// 金額は税込・円（StripeのJPYはゼロdecimal通貨のため、円をそのままunit_amountに渡せばOK）
 
 export type PlanId = "free" | "starter" | "pro";
 export type PayablePlanId = "starter" | "pro";

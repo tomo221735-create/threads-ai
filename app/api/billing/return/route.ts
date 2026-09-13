@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getSession, createSubscription } from "@/lib/komoju";
+import { getCheckoutSession, cancelSubscription } from "@/lib/stripe";
 import { PLANS, PlanId } from "@/lib/plans";
 
-// KOMOJUのホストページ決済完了後、return_url に
+// Stripe Checkoutの決済完了後、success_url に
 // ?session_id=xxxx が付与されてブラウザがリダイレクトされてくる。
-// https://doc.komoju.com/recipes/check-session-status-on-return_url
+// https://docs.stripe.com/checkout/embedded/quickstart#handle-post-checkout-events
+//
+// 正式な状態確定はwebhook側（checkout.session.completed等）で行うが、
+// UX上ここでも即時反映を試みる（冪等なので二重に処理されても問題ない）。
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const sessionId = url.searchParams.get("session_id");
@@ -34,23 +37,34 @@ export async function GET(request: Request) {
       return redirect("/billing?error=session_not_found");
     }
 
-    // 既に処理済み（多重アクセス・リロード対策）
     if (billingSession.status === "completed") {
       return redirect("/billing?success=1");
     }
 
-    const session = await getSession(sessionId);
+    const session = await getCheckoutSession(sessionId);
+    const customerId =
+      typeof session.customer === "string"
+        ? session.customer
+        : session.customer?.id;
+    const subscriptionObj =
+      typeof session.subscription === "string" ? null : session.subscription;
+    const subscriptionId =
+      typeof session.subscription === "string"
+        ? session.subscription
+        : session.subscription?.id;
 
-    if (session.status !== "completed" || !session.customer_id) {
+    if (session.status !== "complete" || !customerId || !subscriptionId) {
       await supabase
         .from("billing_sessions")
-        .update({ status: session.status === "cancelled" ? "cancelled" : "expired" })
+        .update({
+          status: session.status === "expired" ? "expired" : "cancelled",
+        })
         .eq("session_id", sessionId);
 
       return redirect(
-        session.status === "cancelled"
-          ? "/billing?cancelled=1"
-          : "/billing?error=incomplete"
+        session.status === "expired"
+          ? "/billing?error=incomplete"
+          : "/billing?cancelled=1"
       );
     }
 
@@ -61,44 +75,33 @@ export async function GET(request: Request) {
       return redirect("/billing?error=invalid_plan");
     }
 
-    // 既存の有料サブスクがあれば解約してから新しいプランへ切り替える
-    // （KOMOJUのSubscriptionは金額変更ができず、削除→新規作成が必要なため）
     const { data: profile } = await supabase
       .from("profiles")
-      .select("komoju_subscription_id")
+      .select("stripe_subscription_id")
       .eq("id", billingSession.user_id)
       .maybeSingle();
 
-    if (profile?.komoju_subscription_id) {
+    if (
+      profile?.stripe_subscription_id &&
+      profile.stripe_subscription_id !== subscriptionId
+    ) {
       try {
-        const { deleteSubscription } = await import("@/lib/komoju");
-        await deleteSubscription(profile.komoju_subscription_id);
+        await cancelSubscription(profile.stripe_subscription_id);
       } catch (e) {
         console.error("既存サブスクリプションの解約に失敗:", e);
-        // 続行する（新規作成は試みる）
       }
     }
 
-    const subscription = await createSubscription({
-      customerId: session.customer_id,
-      amount: planDef.price,
-      currency: "JPY",
-      period: "monthly",
-      metadata: {
-        user_id: billingSession.user_id,
-        plan,
-      },
-    });
-
     const now = new Date().toISOString();
+    const subscriptionStatus = subscriptionObj?.status ?? "active";
 
     await supabase
       .from("profiles")
       .update({
         plan,
-        plan_status: "active",
-        komoju_customer_id: session.customer_id,
-        komoju_subscription_id: subscription.id,
+        plan_status: subscriptionStatus === "active" ? "active" : subscriptionStatus,
+        stripe_customer_id: customerId,
+        stripe_subscription_id: subscriptionId,
         plan_updated_at: now,
       })
       .eq("id", billingSession.user_id);
@@ -107,8 +110,8 @@ export async function GET(request: Request) {
       .from("billing_sessions")
       .update({
         status: "completed",
-        komoju_customer_id: session.customer_id,
-        komoju_subscription_id: subscription.id,
+        stripe_customer_id: customerId,
+        stripe_subscription_id: subscriptionId,
         processed_at: now,
       })
       .eq("session_id", sessionId);
@@ -117,7 +120,7 @@ export async function GET(request: Request) {
       user_id: billingSession.user_id,
       event_type: "subscription.created_via_return_url",
       plan,
-      komoju_subscription_id: subscription.id,
+      stripe_subscription_id: subscriptionId,
       amount: planDef.price,
       currency: "JPY",
     });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { deleteSubscription } from "@/lib/komoju";
+import { cancelSubscription } from "@/lib/stripe";
 
 export async function POST() {
   try {
@@ -25,7 +25,7 @@ export async function POST() {
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("komoju_subscription_id, plan")
+      .select("stripe_subscription_id, plan")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -36,7 +36,7 @@ export async function POST() {
       );
     }
 
-    if (!profile.komoju_subscription_id) {
+    if (!profile.stripe_subscription_id) {
       return NextResponse.json(
         { error: "有効なサブスクリプションがありません。" },
         { status: 400 }
@@ -44,9 +44,9 @@ export async function POST() {
     }
 
     try {
-      await deleteSubscription(profile.komoju_subscription_id);
+      await cancelSubscription(profile.stripe_subscription_id);
     } catch (e) {
-      console.error("subscription delete error:", e);
+      console.error("subscription cancel error:", e);
       return NextResponse.json(
         { error: "解約処理に失敗しました。時間をおいて再度お試しください。" },
         { status: 500 }
@@ -60,7 +60,7 @@ export async function POST() {
       .update({
         plan: "free",
         plan_status: "cancelled",
-        komoju_subscription_id: null,
+        stripe_subscription_id: null,
         plan_updated_at: now,
       })
       .eq("id", user.id);
