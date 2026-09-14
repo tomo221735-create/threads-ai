@@ -102,6 +102,28 @@ export default function RegisterPage() {
             >
               ログインはこちら
             </a>
+
+            <p className="text-center text-xs text-text-faint">
+              登録すると、
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-accent-cyan"
+              >
+                利用規約
+              </a>
+              および
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-accent-cyan"
+              >
+                プライバシーポリシー
+              </a>
+              に同意したものとみなされます。
+            </p>
           </div>
         </div>
       </div>
