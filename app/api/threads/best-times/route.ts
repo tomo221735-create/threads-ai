@@ -50,7 +50,10 @@ export async function GET() {
     );
 
     // ②' プランチェック（PRO=フル表示 / STARTER=モザイク表示用にデータは返す / FREE=非表示）
-    const { plan, access } = await getAnalyticsAccess(supabase, user.id, user.email);
+    const { plan, access } = await getAnalyticsAccess(supabase, user.id, user.email, {
+      // FREEユーザーにも実データをモザイク表示で見せて、アップグレードしたくなる導線にする
+      freePreview: true,
+    });
 
     if (access === "locked") {
       return NextResponse.json({

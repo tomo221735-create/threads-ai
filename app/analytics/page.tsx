@@ -366,9 +366,16 @@ export default function AnalyticsPage() {
     );
   }
 
-  // 3セクション共通のアクセスレベル（どれか取得できたものを使う。基本は全部同じ値になる）
-  const access: AnalyticsAccess =
-    performance?.access ?? bestTimes?.access ?? genreTrend.access ?? "locked";
+  // セクションごとにアクセスレベルが異なる場合があるので、それぞれ個別に持つ
+  // （performance/best-timesはFREEもプレビュー、genre-trendsはFREEはロックのまま、など）
+  const performanceAccess: AnalyticsAccess = performance?.access ?? "locked";
+  const bestTimesAccess: AnalyticsAccess = bestTimes?.access ?? "locked";
+  const genreAccess: AnalyticsAccess = genreTrend.access ?? "locked";
+
+  const anyPreview =
+    performanceAccess === "preview" ||
+    bestTimesAccess === "preview" ||
+    genreAccess === "preview";
 
   const trendLabel =
     performance?.overall?.trend === "up"
@@ -394,9 +401,9 @@ export default function AnalyticsPage() {
           過去の投稿データから、伸びている傾向とおすすめの投稿時間をまとめています。
         </p>
 
-        {access === "preview" && (
+        {anyPreview && (
           <div className="mt-4 rounded-xl border border-accent-cyan/20 bg-accent-cyan/5 px-4 py-3 text-xs text-text-muted">
-            STARTERプランではプレビュー表示です。PROプランで全てのデータを確認できます。
+            一部の項目はプレビュー表示です。PROプランで全てのデータを確認できます。
           </div>
         )}
 
@@ -418,14 +425,14 @@ export default function AnalyticsPage() {
                 <h2 className="font-bold text-text-primary">
                   週ごとのパフォーマンス推移
                 </h2>
-                {trendLabel && access === "full" && (
+                {trendLabel && performanceAccess === "full" && (
                   <span className="text-xs font-semibold text-accent-cyan">
                     {trendLabel}
                   </span>
                 )}
               </div>
 
-              {access === "locked" ? (
+              {performanceAccess === "locked" ? (
                 <LockedNotice
                   message={
                     performance?.message ??
@@ -440,13 +447,13 @@ export default function AnalyticsPage() {
                 </p>
               ) : (
                 <div className="relative mt-4">
-                  {access === "preview" && (
+                  {performanceAccess === "preview" && (
                     <UpgradeOverlay onUpgrade={goToBilling} />
                   )}
 
                   <div
                     className={
-                      access === "preview"
+                      performanceAccess === "preview"
                         ? "pointer-events-none select-none blur-sm"
                         : ""
                     }
@@ -498,7 +505,7 @@ export default function AnalyticsPage() {
                 おすすめの投稿時間帯
               </h2>
 
-              {access === "locked" ? (
+              {bestTimesAccess === "locked" ? (
                 <LockedNotice
                   message={
                     bestTimes?.message ??
@@ -513,13 +520,13 @@ export default function AnalyticsPage() {
                 </p>
               ) : (
                 <div className="relative mt-4">
-                  {access === "preview" && (
+                  {bestTimesAccess === "preview" && (
                     <UpgradeOverlay onUpgrade={goToBilling} />
                   )}
 
                   <div
                     className={
-                      access === "preview"
+                      bestTimesAccess === "preview"
                         ? "pointer-events-none select-none blur-sm"
                         : ""
                     }
@@ -556,7 +563,7 @@ export default function AnalyticsPage() {
 
                     <button
                       onClick={() => router.push("/settings")}
-                      disabled={access !== "full"}
+                      disabled={bestTimesAccess !== "full"}
                       className="mt-5 w-full rounded-xl border border-border-soft px-4 py-3 text-sm font-semibold text-text-primary transition hover:border-accent-cyan/40 disabled:opacity-50"
                     >
                       自動投稿の時間設定を変更する →
@@ -580,10 +587,10 @@ export default function AnalyticsPage() {
 
                 <button
                   onClick={refreshGenreTrend}
-                  disabled={genreTrendLoading || access === "locked"}
+                  disabled={genreTrendLoading || genreAccess === "locked"}
                   className="shrink-0 rounded-full bg-gradient-to-r from-accent-cyan to-accent-violet px-4 py-2 text-xs font-bold text-[#06110d] shadow-[0_0_16px_rgba(79,243,208,0.25)] transition active:scale-[0.98] disabled:opacity-50"
                 >
-                  {access === "preview"
+                  {genreAccess === "preview"
                     ? "PROで更新"
                     : genreTrendLoading
                       ? "分析中..."
@@ -599,20 +606,20 @@ export default function AnalyticsPage() {
                 <p className="mt-3 text-sm text-amber-200">{genreTrendError}</p>
               )}
 
-              {access === "locked" ? (
+              {genreAccess === "locked" ? (
                 <LockedNotice
                   message="同ジャンルの人気投稿リサーチはPROプラン限定機能です。"
                   onUpgrade={goToBilling}
                 />
               ) : (
                 <div className="relative mt-4">
-                  {access === "preview" && (
+                  {genreAccess === "preview" && (
                     <UpgradeOverlay onUpgrade={goToBilling} />
                   )}
 
                   <div
                     className={
-                      access === "preview"
+                      genreAccess === "preview"
                         ? "pointer-events-none select-none blur-sm"
                         : ""
                     }

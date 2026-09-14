@@ -49,15 +49,17 @@ export async function requirePlan(
 
 // PRO限定の分析系機能向け。プランごとに3段階のアクセスレベルを返す。
 // - full:    PRO（および管理者）。データをそのまま見せる
-// - preview: STARTER。データ自体は返すが、フロント側で「モザイク」表示にして
+// - preview: データ自体は返すが、フロント側で「モザイク」表示にして
 //            中身は見せず、アップグレード導線だけ機能させる
-// - locked:  FREE（および支払い失敗・解約済み）。データ自体を返さない
+//            （STARTERは常にこれ。FREEも freePreview オプションを渡した機能ではこれになる）
+// - locked:  データ自体を返さない（FREE。支払い失敗・解約済みも同様）
 export type AnalyticsAccess = "full" | "preview" | "locked";
 
 export async function getAnalyticsAccess(
   supabase: SupabaseClient,
   userId: string,
-  email?: string | null
+  email?: string | null,
+  options?: { freePreview?: boolean }
 ): Promise<{ plan: PlanId; access: AnalyticsAccess }> {
   if (isAdminEmail(email)) {
     return { plan: "pro", access: "full" };
@@ -78,11 +80,20 @@ export async function getAnalyticsAccess(
 
   // lib/plans.ts の PLAN_LIMITS.proAnalytics を唯一の判定基準にする
   // （どのプランがPRO分析機能を持つかはそこだけ見れば分かるようにしておく）
-  const access: AnalyticsAccess = PLAN_LIMITS[effectivePlan].proAnalytics
-    ? "full"
-    : effectivePlan === "starter"
-      ? "preview"
-      : "locked";
+  const hasFullAccess = PLAN_LIMITS[effectivePlan].proAnalytics;
+
+  let access: AnalyticsAccess;
+
+  if (hasFullAccess) {
+    access = "full";
+  } else if (effectivePlan === "starter") {
+    access = "preview";
+  } else {
+    // FREE（実質free扱いになったケースも含む）
+    // freePreview: true の機能は、実データをモザイク表示にして見せて
+    // 「使ってみたい」と思わせる集客導線にする
+    access = options?.freePreview ? "preview" : "locked";
+  }
 
   return { plan: effectivePlan, access };
 }
