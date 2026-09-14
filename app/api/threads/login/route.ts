@@ -37,15 +37,22 @@ const redirectUri = "https://threads-ai-six.vercel.app/api/threads/callback";
       })
     ).toString("base64url");
 
+    // 2026年にMetaの正式ドキュメントがthreads.netからthreads.comに更新されたため、
+    // それに合わせて認可エンドポイントもthreads.comに変更
     const authUrl =
-      `https://threads.net/oauth/authorize` +
+      `https://threads.com/oauth/authorize` +
       `?client_id=${encodeURIComponent(appId)}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&scope=${encodeURIComponent(scopes)}` +
       `&response_type=code` +
       `&state=${encodeURIComponent(state)}`;
 
-    return NextResponse.redirect(authUrl);
+    // 以前はここで302リダイレクトしていたが、モバイル（特にAndroid）だと
+    // OSにThreadsアプリへの遷移として横取りされ、連携が完了しないまま
+    // Threadsアプリが開くだけになってしまうことがあった。
+    // Meta公式ドキュメント推奨の window.open(url, "_system") でこのURLを開いてもらうため、
+    // ここではリダイレクトせずJSONでURLを返す。
+    return NextResponse.json({ authUrl });
   } catch (error) {
     console.error("Threads login error:", error);
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
+import { connectThreads } from "../lib/connect-threads";
 
 // AIの出力（【ネタ1】〜【ネタ10】区切り、または「1. 」形式の番号付きリスト）を
 // 1つずつのネタ配列に分割する
@@ -579,13 +580,36 @@ useEffect(() => {
           return;
         }
 
-        window.location.href =
-          `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
+        try {
+          await connectThreads(user.id);
+        } catch (err) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Threads連携の開始に失敗しました。"
+          );
+        }
       }}
       className="mt-5 w-full rounded-xl bg-accent-cyan px-5 py-3.5 text-sm font-bold text-[#06110d] shadow-[0_0_20px_rgba(79,243,208,0.3)] transition active:scale-[0.98]"
     >
       Threadsと連携する
     </button>
+  )}
+
+  {!threadsUsername && (
+    <p className="mt-2 text-xs text-text-faint">
+      ※
+      ブラウザで別のThreadsアカウントにログイン中だと、そのアカウントで自動的に連携されます。連携したいアカウントを選びたい場合は、先に
+      <a
+        href="https://www.threads.com/login"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mx-1 underline hover:text-accent-cyan"
+      >
+        Threads側でログアウト・ログインし直して
+      </a>
+      から、もう一度連携をお試しください。
+    </p>
   )}
 
     {/* 連携状態に関わらず常に表示 */}
@@ -642,8 +666,15 @@ useEffect(() => {
 
                     if (!user) return;
 
-                    window.location.href =
-                      `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
+                    try {
+                      await connectThreads(user.id);
+                    } catch (err) {
+                      setAnalysisError(
+                        err instanceof Error
+                          ? err.message
+                          : "Threads連携の開始に失敗しました。"
+                      );
+                    }
                   }}
                   className="mt-3 block w-full rounded-xl border border-red-400/30 bg-surface-raised px-4 py-2.5 text-center text-sm font-semibold text-text-primary transition hover:border-accent-cyan/40"
                 >

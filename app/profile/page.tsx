@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
+import { connectThreads } from "../../lib/connect-threads";
 
 export default function ProfilePage() {
 const router = useRouter();
@@ -263,13 +264,34 @@ if (error) {
       return;
     }
 
-    window.location.href =
-      `/api/threads/login?userId=${encodeURIComponent(user.id)}`;
+    try {
+      await connectThreads(user.id);
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : "Threads連携の開始に失敗しました。"
+      );
+    }
   }}
   className="w-full rounded-xl border border-border-soft bg-surface-raised px-6 py-3.5 font-semibold text-text-primary transition hover:border-accent-violet/40 active:scale-[0.98] sm:w-auto"
 >
   Threadsアカウントを連携する
 </button>
+
+<p className="text-xs text-text-faint">
+  ※
+  ブラウザで別のThreadsアカウントにログイン中だと、そのアカウントで自動的に連携されます。連携したいアカウントを選びたい場合は、先に
+  <a
+    href="https://www.threads.com/login"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="mx-1 underline hover:text-accent-cyan"
+  >
+    Threads側でログアウト・ログインし直して
+  </a>
+  から、もう一度連携をお試しください。
+</p>
 
           {message && (
             <p className="text-accent-cyan">
