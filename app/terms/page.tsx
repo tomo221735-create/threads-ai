@@ -16,13 +16,13 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold text-text-primary">利用規約</h1>
 
         <p className="mt-3 text-sm text-text-faint">
-          最終更新日：[YYYY年MM月DD日]
+          最終更新日：[2026年09月14日]
         </p>
 
         <div className="mt-8 space-y-8 text-text-muted">
           <section>
             <p className="leading-relaxed">
-              本利用規約（以下「本規約」といいます）は、[運営者名]（以下「当方」といいます）が提供する「Threads
+              本利用規約（以下「本規約」といいます）は、[大道智之]（以下「当方」といいます）が提供する「Threads
               AI」（以下「本サービス」といいます）の利用条件を定めるものです。ユーザーは、本規約に同意の上、本サービスをご利用ください。
             </p>
           </section>
@@ -211,9 +211,9 @@ export default function TermsPage() {
               本規約に関するお問い合わせは、以下の窓口までご連絡ください。
             </p>
             <p className="mt-3 leading-relaxed">
-              運営者：[運営者名]
+              運営者：[大道智之]
               <br />
-              連絡先：[連絡先メールアドレス]
+              連絡先：[tomo.221735@icloud.com]
             </p>
           </section>
         </div>

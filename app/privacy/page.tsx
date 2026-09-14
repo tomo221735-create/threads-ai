@@ -18,7 +18,7 @@ export default function PrivacyPage() {
         </h1>
 
         <p className="mt-3 text-sm text-text-faint">
-          最終更新日：[YYYY年MM月DD日]
+          最終更新日：[2026年09月14日]
         </p>
 
         <div className="mt-8 space-y-8 text-text-muted">
