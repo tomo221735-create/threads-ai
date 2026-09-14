@@ -50,7 +50,7 @@ export async function GET() {
     );
 
     // ②' プランチェック（PRO=フル表示 / STARTER=モザイク表示用にデータは返す / FREE=非表示）
-    const { plan, access } = await getAnalyticsAccess(supabase, user.id);
+    const { plan, access } = await getAnalyticsAccess(supabase, user.id, user.email);
 
     if (access === "locked") {
       return NextResponse.json({

@@ -2,12 +2,66 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { getNews } from "@/lib/news";
+import { getNews, NewsItem } from "@/lib/news";
 import { getAnalyticsAccess } from "@/lib/plan-guard";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// 同じ記事の重複を取り除く（リンクが同じ、なければタイトルが同じものを除外）
+function dedupeNews(items: NewsItem[]): NewsItem[] {
+  const seen = new Set<string>();
+  const result: NewsItem[] = [];
+
+  for (const item of items) {
+    const key = item.link || item.title;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+
+  return result;
+}
+
+// ジャンルキーワードで記事を検索する。
+// 「テーマ＋職業＋修飾語」のような複合語はGoogleニュース検索がAND扱いになり
+// 0件になりやすいので、段階的に条件を緩めながら再検索して精度（ヒット率）を上げる。
+async function collectGenreNews(genreKeyword: string) {
+  const [topicNews, howToNews, audienceNews] = await Promise.all([
+    getNews(`${genreKeyword} 注目`, 10, 21),
+    getNews(`${genreKeyword} SNS 発信 コツ`, 8, 45),
+    getNews(`${genreKeyword} 悩み`, 8, 45),
+  ]);
+
+  let combined = dedupeNews([...topicNews, ...howToNews, ...audienceNews]);
+  let broadNews: NewsItem[] = [];
+
+  // ① 記事数が少ない場合：修飾語を外し、期間も広げたゆるい検索にフォールバック
+  if (combined.length < 3) {
+    broadNews = await getNews(genreKeyword, 12, 60);
+    combined = dedupeNews([...combined, ...broadNews]);
+  }
+
+  // ② それでも1件も見つからない場合：
+  // 「発信テーマ＋職業」のような複合ワードをAND検索してしまっているのが原因のことが多いため、
+  // 単語単位に分解してそれぞれ個別に検索する
+  if (combined.length === 0) {
+    const tokens = genreKeyword
+      .split(/[\s　]+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length > 1);
+
+    if (tokens.length > 1) {
+      const tokenResults = await Promise.all(
+        tokens.map((t) => getNews(t, 8, 60))
+      );
+      combined = dedupeNews(tokenResults.flat());
+    }
+  }
+
+  return { topicNews, howToNews, audienceNews, broadNews, combined };
+}
 
 // 画面表示用：保存済みのジャンルトレンド要約とプラン別アクセスレベルを返す。
 // STARTERはモザイク表示のため中身（summary）自体は返す。FREEは中身を返さない。
@@ -124,17 +178,11 @@ const { plan, access } = await getAnalyticsAccess(supabase, user.id, user.email)
     // Threads自体の投稿は公式APIでは検索できないため、
     // 「このジャンルで今注目されている話題」「発信のコツ・切り口」の
     // Web記事をリサーチ材料として使う（代替アプローチ）。
-    const [topicNews, howToNews, audienceNews] = await Promise.all([
-      getNews(`${genreKeyword} 注目`, 8, 14),
-      getNews(`${genreKeyword} SNS 発信 コツ`, 6, 30),
-      getNews(`${genreKeyword} 悩み 知りたいこと`, 6),
-    ]);
+    // 条件を絞りすぎて0件になるのを防ぐため、段階的にゆるい検索へフォールバックする
+    const { topicNews, howToNews, audienceNews, broadNews, combined } =
+      await collectGenreNews(genreKeyword);
 
-    const allTitles = [
-      ...topicNews.map((n) => n.title),
-      ...howToNews.map((n) => n.title),
-      ...audienceNews.map((n) => n.title),
-    ].filter(Boolean);
+    const allTitles = combined.map((n) => n.title).filter(Boolean);
 
     if (allTitles.length === 0) {
       return NextResponse.json({
@@ -199,6 +247,7 @@ ${allTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}
         topicNews,
         howToNews,
         audienceNews,
+        broadNews,
       },
       updatedAt: new Date().toISOString(),
     });
