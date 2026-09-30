@@ -16,8 +16,11 @@ type Settings = {
   target_persona: string;
   comment_mode: "ai" | "template";
   comment_templates: string[];
-    max_replies_per_day: number;
+  max_replies_per_day: number;
   max_replies_per_run: number;
+  comment_instructions: string;
+  comment_examples: string[];
+  comment_max_length: number;
   last_auto_run_at?: string | null;
   last_auto_run_error?: string | null;
 };
@@ -50,8 +53,11 @@ const DEFAULT_SETTINGS: Settings = {
   target_persona: "",
   comment_mode: "ai",
   comment_templates: [],
-    max_replies_per_day: 10,
+  max_replies_per_day: 10,
   max_replies_per_run: 3,
+  comment_instructions: "",
+  comment_examples: [],
+  comment_max_length: 100,
 };
 
 const STATUS_LABEL: Record<Candidate["status"], string> = {
@@ -76,6 +82,7 @@ export default function EngagementPage() {
   const [keywordsText, setKeywordsText] = useState("");
   const [excludeAuthorsText, setExcludeAuthorsText] = useState("");
   const [templatesText, setTemplatesText] = useState("");
+  const [examplesText, setExamplesText] = useState("");
 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [statusFilter, setStatusFilter] = useState<"pending" | "all">(
@@ -124,6 +131,7 @@ export default function EngagementPage() {
       setKeywordsText((s.keywords ?? []).join(", "));
       setExcludeAuthorsText((s.exclude_authors ?? []).join(", "));
       setTemplatesText((s.comment_templates ?? []).join("\n"));
+      setExamplesText((s.comment_examples ?? []).join("\n"));
     }
   };
 
@@ -159,6 +167,11 @@ export default function EngagementPage() {
       .map((t) => t.trim())
       .filter(Boolean);
 
+    const commentExamples = examplesText
+      .split("\n")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
     const res = await fetch("/api/threads/engagement/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -167,6 +180,7 @@ export default function EngagementPage() {
         keywords,
         exclude_authors: excludeAuthors,
         comment_templates: commentTemplates,
+        comment_examples: commentExamples,
       }),
     });
 
@@ -312,8 +326,8 @@ export default function EngagementPage() {
         <section className="mt-6 space-y-4 rounded-2xl border border-border-soft bg-surface p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
           <div className="flex items-center justify-between">
             <label className="font-semibold text-text-primary">
-  30分ごとに自動で検索・判定する
-</label>
+              30分ごとに自動で検索・判定する
+            </label>
             <input
               type="checkbox"
               checked={settings.enabled}
@@ -413,6 +427,71 @@ export default function EngagementPage() {
                 : "下に登録した定型文の中から、AIが投稿内容に一番合うものを1つそのまま選んで使います（文面は変更しません）。"}
             </p>
 
+            {settings.comment_mode === "ai" && (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-text-primary">
+                    コメント作成の指示（任意）
+                  </label>
+                  <textarea
+                    value={settings.comment_instructions}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        comment_instructions: e.target.value,
+                      })
+                    }
+                    rows={4}
+                    maxLength={1000}
+                    placeholder={
+                      "例）\n・まず相手の気持ちに共感する一言から始める\n・最後は質問で終わらせず、応援の言葉で締める\n・絵文字は使わない\n・「〜ですよね」「〜かもしれませんね」など柔らかい語尾にする"
+                    }
+                    className="w-full resize-none rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+                  />
+                  <p className="mt-1 text-xs text-text-muted">
+                    書いた内容は基本ルールより優先されます（最大1000文字）。
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-text-primary">
+                    参考にするコメント例（1行につき1件・最大5件）
+                  </label>
+                  <textarea
+                    value={examplesText}
+                    onChange={(e) => setExamplesText(e.target.value)}
+                    rows={4}
+                    placeholder={
+                      "例）\nそれ、すごくわかります。私も同じところで悩んでました。\n続けてるだけで十分すごいと思います。応援してます！"
+                    }
+                    className="w-full resize-none rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+                  />
+                  <p className="mt-1 text-xs text-text-muted">
+                    口調・長さ・構成を真似します。文面そのままのコピーはしません。
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-text-primary">
+                    コメントの最大文字数
+                  </label>
+                  <input
+                    type="number"
+                    min={20}
+                    max={300}
+                    value={settings.comment_max_length}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        comment_max_length: Number(e.target.value),
+                      })
+                    }
+                    className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+                  />
+                </div>
+              </div>
+            )}
+
             {settings.comment_mode === "template" && (
               <div className="mt-3">
                 <label className="mb-2 block text-sm font-semibold text-text-primary">
@@ -488,13 +567,13 @@ export default function EngagementPage() {
 
           <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/5 p-3">
             <div>
-             <p className="font-semibold text-text-primary">
-  AIの判定だけで自動返信まで行う
-</p>
-<p className="text-xs text-text-muted">
-  ON：30分ごとに検索し、AIが「返信すべき」と判断した投稿へ自動で返信します。
-  OFF：下書きの作成だけを自動で行い、投稿は手動です。
-</p>
+              <p className="font-semibold text-text-primary">
+                AIの判定だけで自動返信まで行う
+              </p>
+              <p className="text-xs text-text-muted">
+                ON：30分ごとに検索し、AIが「返信すべき」と判断した投稿へ自動で返信します。
+                OFF：下書きの作成だけを自動で行い、投稿は手動です。
+              </p>
             </div>
             <input
               type="checkbox"
@@ -506,45 +585,53 @@ export default function EngagementPage() {
             />
           </div>
 
-<div className="flex gap-4">
-  <div className="flex-1">
-    <label className="mb-2 block font-semibold text-text-primary">
-      1日の自動返信の上限
-    </label>
-    <input
-      type="number"
-      min={1}
-      max={30}
-      value={settings.max_replies_per_day}
-      onChange={(e) =>
-        setSettings({ ...settings, max_replies_per_day: Number(e.target.value) })
-      }
-      className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
-    />
-  </div>
-  <div className="flex-1">
-    <label className="mb-2 block font-semibold text-text-primary">
-      30分ごとの自動返信の上限
-    </label>
-    <input
-      type="number"
-      min={1}
-      max={5}
-      value={settings.max_replies_per_run}
-      onChange={(e) =>
-        setSettings({ ...settings, max_replies_per_run: Number(e.target.value) })
-      }
-      className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
-    />
-  </div>
-</div>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="mb-2 block font-semibold text-text-primary">
+                1日の自動返信の上限
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={settings.max_replies_per_day}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    max_replies_per_day: Number(e.target.value),
+                  })
+                }
+                className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="mb-2 block font-semibold text-text-primary">
+                30分ごとの自動返信の上限
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={5}
+                value={settings.max_replies_per_run}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    max_replies_per_run: Number(e.target.value),
+                  })
+                }
+                className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+              />
+            </div>
+          </div>
 
-{settings.last_auto_run_at && (
-  <p className="text-xs text-text-muted">
-    最終自動実行：{new Date(settings.last_auto_run_at).toLocaleString("ja-JP")}
-    {settings.last_auto_run_error && `（${settings.last_auto_run_error}）`}
-  </p>
-)}
+          {settings.last_auto_run_at && (
+            <p className="text-xs text-text-muted">
+              最終自動実行：
+              {new Date(settings.last_auto_run_at).toLocaleString("ja-JP")}
+              {settings.last_auto_run_error &&
+                `（${settings.last_auto_run_error}）`}
+            </p>
+          )}
 
           <button
             onClick={saveSettings}

@@ -16,6 +16,9 @@ const DEFAULT_SETTINGS = {
   comment_templates: [] as string[],
   max_replies_per_day: 10,
   max_replies_per_run: 3,
+  comment_instructions: "",
+  comment_examples: [] as string[],
+  comment_max_length: 100,
 };
 
 export async function GET() {
@@ -108,21 +111,39 @@ export async function POST(request: Request) {
 
     const commentMode = body.comment_mode === "template" ? "template" : "ai";
 
-        const maxRepliesPerDay = Math.min(
-      Math.max(Number(body.max_replies_per_day) || 10, 1),
-      30
-    );
-    const maxRepliesPerRun = Math.min(
-      Math.max(Number(body.max_replies_per_run) || 3, 1),
-      5
-    );
-
     const commentTemplates = Array.isArray(body.comment_templates)
       ? body.comment_templates
           .map((t: unknown) => String(t).trim())
           .filter(Boolean)
           .slice(0, 20) // 登録しすぎ防止
       : DEFAULT_SETTINGS.comment_templates;
+
+    const maxRepliesPerDay = Math.min(
+      Math.max(Number(body.max_replies_per_day) || 10, 1),
+      30
+    );
+
+    const maxRepliesPerRun = Math.min(
+      Math.max(Number(body.max_replies_per_run) || 3, 1),
+      5
+    );
+
+    const commentInstructions =
+      typeof body.comment_instructions === "string"
+        ? body.comment_instructions.trim().slice(0, 1000)
+        : "";
+
+    const commentExamples = Array.isArray(body.comment_examples)
+      ? body.comment_examples
+          .map((e: unknown) => String(e).trim().slice(0, 300))
+          .filter(Boolean)
+          .slice(0, 5)
+      : DEFAULT_SETTINGS.comment_examples;
+
+    const commentMaxLength = Math.min(
+      Math.max(Number(body.comment_max_length) || 100, 20),
+      300
+    );
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -148,8 +169,11 @@ export async function POST(request: Request) {
         target_persona: targetPersona,
         comment_mode: commentMode,
         comment_templates: commentTemplates,
-                max_replies_per_day: maxRepliesPerDay,
+        max_replies_per_day: maxRepliesPerDay,
         max_replies_per_run: maxRepliesPerRun,
+        comment_instructions: commentInstructions,
+        comment_examples: commentExamples,
+        comment_max_length: commentMaxLength,
         updated_at: new Date().toISOString(),
       })
       .select()

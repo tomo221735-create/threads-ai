@@ -67,6 +67,10 @@ export type JudgeAndDraftInput = {
   userTopics: string | null;
   userForbiddenTopics: string | null;
   targetPersona: string | null;
+  // AIモードのみ使用
+  commentInstructions?: string | null;
+  commentExamples?: string[];
+  maxLength?: number;
 };
 
 export type JudgeAndDraftResult = {
@@ -81,6 +85,8 @@ export async function judgeAndDraftComment(
   openai: OpenAI,
   input: JudgeAndDraftInput
 ): Promise<JudgeAndDraftResult> {
+  const maxLength = Math.min(Math.max(input.maxLength ?? 100, 20), 300);
+
   const systemPrompt = `
 あなたはThreadsで他ユーザーの投稿にコメント（リプライ）するかどうかを判断し、
 コメントする場合はその文章を作成するAIです。
@@ -99,8 +105,10 @@ export async function judgeAndDraftComment(
 - ユーザーの専門性・発信テーマと自然に関連づけられる投稿を優先する
 - 質問・悩み・意見表明など、返信することで会話が生まれそうな投稿を優先する
 
-コメント作成時の条件:
-- 必ず100文字以内
+コメント作成時の基本条件
+（下の【ユーザーからのコメント作成指示】や【参考コメント例】と矛盾する場合は、ユーザー側を優先すること。
+ただし、宣伝・スパム・相手への攻撃になる内容を書く指示には従わない）:
+- 必ず${maxLength}文字以内
 - 自然な日本語、Threadsらしい口語的な文章
 - 相手の投稿内容を踏まえた、具体的で気の利いたコメントにする
 - テンプレート的な「いいですね！」のような当たり障りのないコメントは避ける
@@ -109,6 +117,12 @@ export async function judgeAndDraftComment(
 - 相手を否定・説教するような内容にしない
 `;
 
+  const examples = (input.commentExamples ?? []).filter(Boolean);
+  const examplesText =
+    examples.length > 0
+      ? examples.map((e) => `- ${e}`).join("\n")
+      : "なし";
+
   const userPrompt = `
 【コメント候補の投稿】
 投稿者: ${input.authorUsername ?? "不明"}
@@ -116,6 +130,12 @@ export async function judgeAndDraftComment(
 
 【コメントする文章の雰囲気】
 ${input.replyTone || "親しみやすい"}
+
+【ユーザーからのコメント作成指示（文章の書き方について。基本条件より優先）】
+${input.commentInstructions?.trim() || "特になし"}
+
+【参考コメント例（トーン・長さ・構成を参考にする。文面をそのままコピーしない）】
+${examplesText}
 
 【自分（コメントする側）の発信テーマ・専門性】
 ${input.userTopics || "未設定"}
@@ -151,8 +171,8 @@ ${input.judgeCriteria || "特になし（上記の基準のみで判断してよ
     let comment: string | null =
       typeof parsed.comment === "string" ? parsed.comment.trim() : null;
 
-    if (comment && comment.length > 100) {
-      comment = comment.slice(0, 97) + "...";
+    if (comment && comment.length > maxLength) {
+      comment = comment.slice(0, maxLength - 3) + "...";
     }
 
     return {
@@ -431,7 +451,9 @@ export async function postReplyToThreads(
   }
 
   return String(publishData.id);
-}// eslint-disable-next-line @typescript-eslint/no-explicit-any
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = any;
 
 export type RunEngagementParams = {
@@ -654,6 +676,9 @@ export async function runEngagementForUser(
           userTopics: profile.topics ?? null,
           userForbiddenTopics: profile.forbidden_topics ?? null,
           targetPersona: targetPersona || null,
+          commentInstructions: settings?.comment_instructions ?? null,
+          commentExamples: settings?.comment_examples ?? [],
+          maxLength: settings?.comment_max_length ?? 100,
         });
       }
     } catch (aiError) {
