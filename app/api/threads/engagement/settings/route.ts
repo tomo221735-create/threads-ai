@@ -11,6 +11,9 @@ const DEFAULT_SETTINGS = {
   reply_tone: "親しみやすい",
   max_candidates_per_run: 10,
   auto_post: false,
+  target_persona: "",
+  comment_mode: "ai" as "ai" | "template",
+  comment_templates: [] as string[],
 };
 
 export async function GET() {
@@ -98,6 +101,18 @@ export async function POST(request: Request) {
       30
     );
 
+    const targetPersona =
+      typeof body.target_persona === "string" ? body.target_persona.trim() : "";
+
+    const commentMode = body.comment_mode === "template" ? "template" : "ai";
+
+    const commentTemplates = Array.isArray(body.comment_templates)
+      ? body.comment_templates
+          .map((t: unknown) => String(t).trim())
+          .filter(Boolean)
+          .slice(0, 20) // 登録しすぎ防止
+      : DEFAULT_SETTINGS.comment_templates;
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -119,6 +134,9 @@ export async function POST(request: Request) {
             : DEFAULT_SETTINGS.reply_tone,
         max_candidates_per_run: maxCandidates,
         auto_post: Boolean(body.auto_post),
+        target_persona: targetPersona,
+        comment_mode: commentMode,
+        comment_templates: commentTemplates,
         updated_at: new Date().toISOString(),
       })
       .select()

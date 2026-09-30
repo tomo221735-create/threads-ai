@@ -6,6 +6,8 @@ import { requirePlan } from "@/lib/plan-guard";
 import {
   searchThreadsPosts,
   judgeAndDraftComment,
+  judgeAndSelectTemplate,
+  expandPersonaToKeywords,
   postReplyToThreads,
 } from "@/lib/threads-engagement";
 
@@ -102,15 +104,51 @@ export async function POST(request: Request) {
     const adhocKeyword =
       typeof body.keyword === "string" ? body.keyword.trim() : "";
 
-    const keywords: string[] = adhocKeyword
-      ? [adhocKeyword]
-      : settings?.keywords ?? [];
+    const manualKeywords: string[] = settings?.keywords ?? [];
+    const targetPersona: string = settings?.target_persona ?? "";
+    const commentMode: "ai" | "template" =
+      settings?.comment_mode === "template" ? "template" : "ai";
+    const commentTemplates: string[] = settings?.comment_templates ?? [];
+
+    if (commentMode === "template" && commentTemplates.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "定型文モードが選択されていますが、定型文が1件も登録されていません。設定画面で定型文を登録してください。",
+        },
+        { status: 400 }
+      );
+    }
+
+    let keywords: string[] = [];
+
+    if (adhocKeyword) {
+      // お試しキーワードが指定された場合は、それ単体で検索する
+      keywords = [adhocKeyword];
+    } else {
+      // ペルソナ描写があれば、AIに検索キーワードを考えさせて手動キーワードと合体させる
+      let personaKeywords: string[] = [];
+
+      if (targetPersona) {
+        try {
+          personaKeywords = await expandPersonaToKeywords(
+            openai,
+            targetPersona
+          );
+        } catch (expandError) {
+          console.error("expandPersonaToKeywords error:", expandError);
+          // ペルソナからの生成に失敗しても、手動キーワードだけで続行する
+        }
+      }
+
+      keywords = Array.from(new Set([...personaKeywords, ...manualKeywords]));
+    }
 
     if (keywords.length === 0) {
       return NextResponse.json(
         {
           error:
-            "検索キーワードが設定されていません。設定画面でキーワードを登録するか、キーワードを指定してください。",
+            "検索条件が設定されていません。設定画面で「探している投稿者像」またはキーワードを登録してください。",
         },
         { status: 400 }
       );
@@ -198,14 +236,28 @@ export async function POST(request: Request) {
       let judged;
 
       try {
-        judged = await judgeAndDraftComment(openai, {
-          postText: target.text,
-          authorUsername: target.username,
-          judgeCriteria: settings?.judge_criteria ?? null,
-          replyTone: settings?.reply_tone ?? null,
-          userTopics: profile.topics ?? null,
-          userForbiddenTopics: profile.forbidden_topics ?? null,
-        });
+        if (commentMode === "template") {
+          judged = await judgeAndSelectTemplate(openai, {
+            postText: target.text,
+            authorUsername: target.username,
+            judgeCriteria: settings?.judge_criteria ?? null,
+            replyTone: settings?.reply_tone ?? null,
+            userTopics: profile.topics ?? null,
+            userForbiddenTopics: profile.forbidden_topics ?? null,
+            targetPersona: targetPersona || null,
+            templates: commentTemplates,
+          });
+        } else {
+          judged = await judgeAndDraftComment(openai, {
+            postText: target.text,
+            authorUsername: target.username,
+            judgeCriteria: settings?.judge_criteria ?? null,
+            replyTone: settings?.reply_tone ?? null,
+            userTopics: profile.topics ?? null,
+            userForbiddenTopics: profile.forbidden_topics ?? null,
+            targetPersona: targetPersona || null,
+          });
+        }
       } catch (aiError) {
         console.error("judgeAndDraftComment error:", aiError);
         judged = {

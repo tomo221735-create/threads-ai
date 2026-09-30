@@ -13,6 +13,9 @@ type Settings = {
   reply_tone: string;
   max_candidates_per_run: number;
   auto_post: boolean;
+  target_persona: string;
+  comment_mode: "ai" | "template";
+  comment_templates: string[];
 };
 
 type Candidate = {
@@ -40,6 +43,9 @@ const DEFAULT_SETTINGS: Settings = {
   reply_tone: "親しみやすい",
   max_candidates_per_run: 10,
   auto_post: false,
+  target_persona: "",
+  comment_mode: "ai",
+  comment_templates: [],
 };
 
 const STATUS_LABEL: Record<Candidate["status"], string> = {
@@ -63,6 +69,7 @@ export default function EngagementPage() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [keywordsText, setKeywordsText] = useState("");
   const [excludeAuthorsText, setExcludeAuthorsText] = useState("");
+  const [templatesText, setTemplatesText] = useState("");
 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [statusFilter, setStatusFilter] = useState<"pending" | "all">(
@@ -110,6 +117,7 @@ export default function EngagementPage() {
       setSettings({ ...DEFAULT_SETTINGS, ...s });
       setKeywordsText((s.keywords ?? []).join(", "));
       setExcludeAuthorsText((s.exclude_authors ?? []).join(", "));
+      setTemplatesText((s.comment_templates ?? []).join("\n"));
     }
   };
 
@@ -140,10 +148,20 @@ export default function EngagementPage() {
       .map((a) => a.trim())
       .filter(Boolean);
 
+    const commentTemplates = templatesText
+      .split("\n")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
     const res = await fetch("/api/threads/engagement/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...settings, keywords, exclude_authors: excludeAuthors }),
+      body: JSON.stringify({
+        ...settings,
+        keywords,
+        exclude_authors: excludeAuthors,
+        comment_templates: commentTemplates,
+      }),
     });
 
     const data = await res.json().catch(() => null);
@@ -302,7 +320,25 @@ export default function EngagementPage() {
 
           <div>
             <label className="mb-2 block font-semibold text-text-primary">
-              検索キーワード（カンマ区切りで複数可）
+              探している投稿者像（自由記述）
+            </label>
+            <textarea
+              value={settings.target_persona}
+              onChange={(e) =>
+                setSettings({ ...settings, target_persona: e.target.value })
+              }
+              rows={3}
+              placeholder="例）お客さんが来なくて困っているサロンオーナー"
+              className="w-full resize-none rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+            />
+            <p className="mt-1 text-xs text-text-muted">
+              ここに書いた内容から、AIが自動でThreadsの検索キーワードを考えて検索します。
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-2 block font-semibold text-text-primary">
+              追加のキーワード（任意・カンマ区切りで複数可）
             </label>
             <input
               value={keywordsText}
@@ -310,6 +346,9 @@ export default function EngagementPage() {
               placeholder="例）フリーランス 悩み, 副業 始め方"
               className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
             />
+            <p className="mt-1 text-xs text-text-muted">
+              上のペルソナ描写と合わせて検索されます。ペルソナ描写だけでも動作します。
+            </p>
           </div>
 
           <div>
@@ -329,15 +368,64 @@ export default function EngagementPage() {
 
           <div>
             <label className="mb-2 block font-semibold text-text-primary">
-              コメントの雰囲気
+              コメントの作り方
             </label>
-            <input
-              value={settings.reply_tone}
-              onChange={(e) =>
-                setSettings({ ...settings, reply_tone: e.target.value })
-              }
-              className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
-            />
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setSettings({ ...settings, comment_mode: "ai" })
+                }
+                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                  settings.comment_mode === "ai"
+                    ? "border-accent-cyan/50 bg-accent-cyan/10 text-accent-cyan"
+                    : "border-border-soft bg-surface-raised text-text-muted"
+                }`}
+              >
+                AIが自由に考える
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setSettings({ ...settings, comment_mode: "template" })
+                }
+                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                  settings.comment_mode === "template"
+                    ? "border-accent-cyan/50 bg-accent-cyan/10 text-accent-cyan"
+                    : "border-border-soft bg-surface-raised text-text-muted"
+                }`}
+              >
+                登録した定型文を使う
+              </button>
+            </div>
+
+            <p className="mt-1 text-xs text-text-muted">
+              {settings.comment_mode === "ai"
+                ? "投稿内容に合わせて、AIがコメント文をゼロから作成します。"
+                : "下に登録した定型文の中から、AIが投稿内容に一番合うものを1つそのまま選んで使います（文面は変更しません）。"}
+            </p>
+
+            {settings.comment_mode === "template" && (
+              <div className="mt-3">
+                <label className="mb-2 block text-sm font-semibold text-text-primary">
+                  定型文（1行につき1パターン）
+                </label>
+                <textarea
+                  value={templatesText}
+                  onChange={(e) => setTemplatesText(e.target.value)}
+                  rows={5}
+                  placeholder={
+                    "例）\nわかります…！うちも最初そうでした。〇〇を試したら変わりましたよ！\n同じ悩みを持つ方多いですよね。応援してます！"
+                  }
+                  className="w-full resize-none rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+                />
+                <p className="mt-1 text-xs text-text-muted">
+                  最低1件登録してください。合いそうな投稿が無い場合はコメントされません。
+                </p>
+              </div>
+            )}
           </div>
 
           <div>

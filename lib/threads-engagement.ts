@@ -65,6 +65,7 @@ export type JudgeAndDraftInput = {
   replyTone: string | null;
   userTopics: string | null;
   userForbiddenTopics: string | null;
+  targetPersona: string | null;
 };
 
 export type JudgeAndDraftResult = {
@@ -121,6 +122,9 @@ ${input.userTopics || "未設定"}
 【コメントしたくないテーマ・避けたい話題】
 ${input.userForbiddenTopics || "特になし"}
 
+【探している投稿者像（この特徴に近いほど積極的にコメントする）】
+${input.targetPersona || "特に指定なし"}
+
 【ユーザー独自の判定基準（最優先で守ること）】
 ${input.judgeCriteria || "特になし（上記の基準のみで判断してよい）"}
 `;
@@ -158,6 +162,168 @@ ${input.judgeCriteria || "特になし（上記の基準のみで判断してよ
     };
   } catch (error) {
     console.error("judgeAndDraftComment JSON parse error:", error, raw);
+
+    return {
+      shouldReply: false,
+      reason: "AIの応答を解析できませんでした。",
+      comment: null,
+    };
+  }
+}
+
+// ペルソナ描写（自由記述の「探している投稿者像」）から、
+// Threads keyword_search にかけるための具体的な検索キーワードを複数生成する。
+// 例:「お客さんが来なくて困っているサロン」→
+//     ["サロン 集客", "お客さん来ない", "サロン 経営 悩み", ...]
+export async function expandPersonaToKeywords(
+  openai: OpenAI,
+  persona: string,
+  maxKeywords = 5
+): Promise<string[]> {
+  const systemPrompt = `
+あなたはSNS（Threads）で特定の悩み・状況を持つ投稿者を見つけるための
+検索キーワードを考えるアシスタントです。
+
+与えられた「探している投稿者像」の説明から、その人物が実際に投稿していそうな
+文章に含まれる可能性が高い、短い検索キーワード（2〜4単語程度の日本語フレーズ）を
+${maxKeywords}個まで考えてください。
+
+条件:
+- 実際にSNSの投稿文に出てきそうな、自然な言い回しにする
+- 抽象的すぎる言葉（例:「悩み」だけ）は避け、具体的な状況が伝わる組み合わせにする
+- 同じ意味の言い換えを複数含めて、表記ゆれをカバーする
+- 必ず以下のJSON形式のみで回答する（説明文やMarkdownは不要）:
+{ "keywords": ["キーワード1", "キーワード2", ...] }
+`;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `探している投稿者像: ${persona}` },
+    ],
+  });
+
+  const raw = completion.choices[0]?.message?.content?.trim();
+
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    const keywords = Array.isArray(parsed.keywords) ? parsed.keywords : [];
+
+    return keywords
+      .map((k: unknown) => String(k).trim())
+      .filter(Boolean)
+      .slice(0, maxKeywords);
+  } catch (error) {
+    console.error("expandPersonaToKeywords JSON parse error:", error, raw);
+    return [];
+  }
+}
+
+export type JudgeAndSelectTemplateInput = JudgeAndDraftInput & {
+  templates: string[];
+};
+
+export type JudgeAndSelectTemplateResult = {
+  shouldReply: boolean;
+  reason: string;
+  comment: string | null;
+};
+
+// 「判定」と「登録済み定型文の中から一番合うものを1つ選ぶ」処理をまとめて行う。
+// 選ばれた定型文の文面は一切変更せず、そのまま comment として返す。
+export async function judgeAndSelectTemplate(
+  openai: OpenAI,
+  input: JudgeAndSelectTemplateInput
+): Promise<JudgeAndSelectTemplateResult> {
+  if (input.templates.length === 0) {
+    return {
+      shouldReply: false,
+      reason: "定型文が1件も登録されていません。",
+      comment: null,
+    };
+  }
+
+  const templateList = input.templates
+    .map((t, i) => `${i}: ${t}`)
+    .join("\n");
+
+  const systemPrompt = `
+あなたはThreadsで他ユーザーの投稿にコメント（リプライ）するかどうかを判断し、
+コメントする場合は、あらかじめ用意された定型文の中から最も合うものを1つ選ぶAIです。
+
+必ず以下のJSON形式のみで回答してください。前置きや説明文は不要です。
+{
+  "should_reply": true または false,
+  "reason": "判定理由を1〜2文で",
+  "template_index": should_replyがtrueの場合のみ、選んだ定型文の番号（数値）。falseの場合はnull
+}
+
+判定の基準:
+- 明らかな宣伝・スパム・炎上目的・攻撃的な投稿にはコメントしない
+- ユーザーが「投稿したくないテーマ」に触れている投稿にはコメントしない
+- 「探している投稿者像」に近い投稿を優先する
+- どの定型文を使っても不自然にならない投稿にだけコメントする
+  （定型文の内容と噛み合わない投稿には無理にコメントしない）
+`;
+
+  const userPrompt = `
+【コメント候補の投稿】
+投稿者: ${input.authorUsername ?? "不明"}
+本文: ${input.postText}
+
+【探している投稿者像】
+${input.targetPersona || "特に指定なし"}
+
+【自分（コメントする側）の発信テーマ・専門性】
+${input.userTopics || "未設定"}
+
+【コメントしたくないテーマ・避けたい話題】
+${input.userForbiddenTopics || "特になし"}
+
+【ユーザー独自の判定基準（最優先で守ること）】
+${input.judgeCriteria || "特になし（上記の基準のみで判断してよい）"}
+
+【登録済みの定型文一覧（番号: 本文）】
+${templateList}
+`;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+  });
+
+  const raw = completion.choices[0]?.message?.content?.trim();
+
+  if (!raw) {
+    return { shouldReply: false, reason: "AIから応答がありませんでした。", comment: null };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    const index = Number(parsed.template_index);
+
+    const shouldReply =
+      Boolean(parsed.should_reply) &&
+      Number.isInteger(index) &&
+      index >= 0 &&
+      index < input.templates.length;
+
+    return {
+      shouldReply,
+      reason:
+        typeof parsed.reason === "string" ? parsed.reason : "判定理由なし",
+      comment: shouldReply ? input.templates[index] : null, // 定型文をそのまま使用（文面は一切変更しない）
+    };
+  } catch (error) {
+    console.error("judgeAndSelectTemplate JSON parse error:", error, raw);
 
     return {
       shouldReply: false,
