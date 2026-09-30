@@ -16,6 +16,10 @@ type Settings = {
   target_persona: string;
   comment_mode: "ai" | "template";
   comment_templates: string[];
+    max_replies_per_day: number;
+  max_replies_per_run: number;
+  last_auto_run_at?: string | null;
+  last_auto_run_error?: string | null;
 };
 
 type Candidate = {
@@ -46,6 +50,8 @@ const DEFAULT_SETTINGS: Settings = {
   target_persona: "",
   comment_mode: "ai",
   comment_templates: [],
+    max_replies_per_day: 10,
+  max_replies_per_run: 3,
 };
 
 const STATUS_LABEL: Record<Candidate["status"], string> = {
@@ -306,8 +312,8 @@ export default function EngagementPage() {
         <section className="mt-6 space-y-4 rounded-2xl border border-border-soft bg-surface p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
           <div className="flex items-center justify-between">
             <label className="font-semibold text-text-primary">
-              この機能を有効にする
-            </label>
+  30分ごとに自動で検索・判定する
+</label>
             <input
               type="checkbox"
               checked={settings.enabled}
@@ -482,12 +488,13 @@ export default function EngagementPage() {
 
           <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/5 p-3">
             <div>
-              <p className="font-semibold text-text-primary">
-                AIの判定だけで自動投稿する
-              </p>
-              <p className="text-xs text-text-muted">
-                OFFの場合は下書きとして保存され、必ずレビュー後に手動で投稿します。
-              </p>
+             <p className="font-semibold text-text-primary">
+  AIの判定だけで自動返信まで行う
+</p>
+<p className="text-xs text-text-muted">
+  ON：30分ごとに検索し、AIが「返信すべき」と判断した投稿へ自動で返信します。
+  OFF：下書きの作成だけを自動で行い、投稿は手動です。
+</p>
             </div>
             <input
               type="checkbox"
@@ -498,6 +505,46 @@ export default function EngagementPage() {
               className="h-5 w-5 accent-red-400"
             />
           </div>
+
+<div className="flex gap-4">
+  <div className="flex-1">
+    <label className="mb-2 block font-semibold text-text-primary">
+      1日の自動返信の上限
+    </label>
+    <input
+      type="number"
+      min={1}
+      max={30}
+      value={settings.max_replies_per_day}
+      onChange={(e) =>
+        setSettings({ ...settings, max_replies_per_day: Number(e.target.value) })
+      }
+      className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+    />
+  </div>
+  <div className="flex-1">
+    <label className="mb-2 block font-semibold text-text-primary">
+      30分ごとの自動返信の上限
+    </label>
+    <input
+      type="number"
+      min={1}
+      max={5}
+      value={settings.max_replies_per_run}
+      onChange={(e) =>
+        setSettings({ ...settings, max_replies_per_run: Number(e.target.value) })
+      }
+      className="w-full rounded-xl border border-border-soft bg-surface-raised p-3 text-text-primary outline-none transition focus:border-accent-cyan/50"
+    />
+  </div>
+</div>
+
+{settings.last_auto_run_at && (
+  <p className="text-xs text-text-muted">
+    最終自動実行：{new Date(settings.last_auto_run_at).toLocaleString("ja-JP")}
+    {settings.last_auto_run_error && `（${settings.last_auto_run_error}）`}
+  </p>
+)}
 
           <button
             onClick={saveSettings}

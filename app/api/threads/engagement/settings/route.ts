@@ -14,6 +14,9 @@ const DEFAULT_SETTINGS = {
   target_persona: "",
   comment_mode: "ai" as "ai" | "template",
   comment_templates: [] as string[],
+    comment_templates: [] as string[],
+  max_replies_per_day: 10,
+  max_replies_per_run: 3,
 };
 
 export async function GET() {
@@ -106,6 +109,15 @@ export async function POST(request: Request) {
 
     const commentMode = body.comment_mode === "template" ? "template" : "ai";
 
+        const maxRepliesPerDay = Math.min(
+      Math.max(Number(body.max_replies_per_day) || 10, 1),
+      30
+    );
+    const maxRepliesPerRun = Math.min(
+      Math.max(Number(body.max_replies_per_run) || 3, 1),
+      5
+    );
+
     const commentTemplates = Array.isArray(body.comment_templates)
       ? body.comment_templates
           .map((t: unknown) => String(t).trim())
@@ -137,6 +149,8 @@ export async function POST(request: Request) {
         target_persona: targetPersona,
         comment_mode: commentMode,
         comment_templates: commentTemplates,
+                max_replies_per_day: maxRepliesPerDay,
+        max_replies_per_run: maxRepliesPerRun,
         updated_at: new Date().toISOString(),
       })
       .select()

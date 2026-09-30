@@ -3,13 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { requirePlan } from "@/lib/plan-guard";
-import {
-  searchThreadsPosts,
-  judgeAndDraftComment,
-  judgeAndSelectTemplate,
-  expandPersonaToKeywords,
-  postReplyToThreads,
-} from "@/lib/threads-engagement";
+import { runEngagementForUser } from "@/lib/threads-engagement";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -40,7 +34,7 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // ② プランチェック（OpenAI課金＋Threads APIレート消費があるため有料プラン限定）
+    // ② プランチェック
     const planCheck = await requirePlan(
       supabase,
       user.id,
@@ -59,7 +53,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // ③ プロフィール取得（Threadsトークン・発信テーマなど）
+    // ③ プロフィール取得
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("*")
@@ -104,227 +98,36 @@ export async function POST(request: Request) {
     const adhocKeyword =
       typeof body.keyword === "string" ? body.keyword.trim() : "";
 
-    const manualKeywords: string[] = settings?.keywords ?? [];
-    const targetPersona: string = settings?.target_persona ?? "";
-    const commentMode: "ai" | "template" =
-      settings?.comment_mode === "template" ? "template" : "ai";
-    const commentTemplates: string[] = settings?.comment_templates ?? [];
+    // ⑤ 検索 → AI判定 → 保存 → 投稿 は共通関数に任せる
+    const result = await runEngagementForUser({
+      supabase,
+      openai,
+      userId: user.id,
+      profile,
+      settings,
+      autoPost: Boolean(settings?.auto_post),
+      adhocKeyword: adhocKeyword || undefined,
+    });
 
-    if (commentMode === "template" && commentTemplates.length === 0) {
+    if (!result.ok) {
       return NextResponse.json(
-        {
-          error:
-            "定型文モードが選択されていますが、定型文が1件も登録されていません。設定画面で定型文を登録してください。",
-        },
-        { status: 400 }
+        { error: result.error },
+        { status: result.status }
       );
     }
 
-    let keywords: string[] = [];
-
-    if (adhocKeyword) {
-      // お試しキーワードが指定された場合は、それ単体で検索する
-      keywords = [adhocKeyword];
-    } else {
-      // ペルソナ描写があれば、AIに検索キーワードを考えさせて手動キーワードと合体させる
-      let personaKeywords: string[] = [];
-
-      if (targetPersona) {
-        try {
-          personaKeywords = await expandPersonaToKeywords(
-            openai,
-            targetPersona
-          );
-        } catch (expandError) {
-          console.error("expandPersonaToKeywords error:", expandError);
-          // ペルソナからの生成に失敗しても、手動キーワードだけで続行する
-        }
-      }
-
-      keywords = Array.from(new Set([...personaKeywords, ...manualKeywords]));
-    }
-
-    if (keywords.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "検索条件が設定されていません。設定画面で「探している投稿者像」またはキーワードを登録してください。",
-        },
-        { status: 400 }
-      );
-    }
-
-    const searchType: "TOP" | "RECENT" = settings?.search_type ?? "RECENT";
-    const excludeAuthors: string[] = (settings?.exclude_authors ?? []).map(
-      (a: string) => a.toLowerCase()
-    );
-    const maxCandidates = settings?.max_candidates_per_run ?? 10;
-    const autoPost = Boolean(settings?.auto_post);
-
-    // ⑤ 既に候補化済みの投稿IDを取得（重複回避）
-    const { data: existing } = await supabase
-      .from("engagement_candidates")
-      .select("threads_post_id")
-      .eq("user_id", user.id);
-
-    const existingIds = new Set(
-      (existing ?? []).map((r: { threads_post_id: string }) => r.threads_post_id)
-    );
-
-    const ownUsername = (profile.threads_username ?? "").toLowerCase();
-
-    // ⑥ キーワードごとに検索し、候補を集める
-    const rawCandidates: {
-      keyword: string;
-      id: string;
-      text: string;
-      permalink: string | null;
-      timestamp: string | null;
-      username: string | null;
-    }[] = [];
-
-    for (const keyword of keywords) {
-      try {
-        const results = await searchThreadsPosts(
-          profile.threads_access_token,
-          keyword,
-          searchType,
-          Math.min(maxCandidates * 3, 50) // 判定前フィルタで減る分、多めに取得
-        );
-
-        for (const post of results) {
-          const username = (post.username ?? "").toLowerCase();
-
-          if (!post.text) continue; // 本文なしはコメント判定できないので除外
-          if (post.is_reply) continue; // リプライそのものへの連鎖は対象外
-          if (existingIds.has(post.id)) continue;
-          if (username && username === ownUsername) continue;
-          if (username && excludeAuthors.includes(username)) continue;
-
-          rawCandidates.push({
-            keyword,
-            id: post.id,
-            text: post.text,
-            permalink: post.permalink,
-            timestamp: post.timestamp,
-            username: post.username,
-          });
-
-          existingIds.add(post.id); // 同じ実行内での重複も防ぐ
-        }
-      } catch (searchError) {
-        console.error(`keyword_search error (${keyword}):`, searchError);
-        // 1キーワードの失敗で全体を止めない
-      }
-    }
-
-    const targets = rawCandidates.slice(0, maxCandidates);
-
-    if (targets.length === 0) {
+    if (result.candidates.length === 0) {
       return NextResponse.json({
         success: true,
-        message:
-          "条件に合う新しい投稿が見つかりませんでした。キーワードや除外設定を見直してみてください。",
+        message: result.message,
         candidates: [],
       });
     }
 
-    // ⑦ AIで判定＋コメント生成 → DB保存（必要ならその場で投稿）
-    const savedCandidates = [];
-
-    for (const target of targets) {
-      let judged;
-
-      try {
-        if (commentMode === "template") {
-          judged = await judgeAndSelectTemplate(openai, {
-            postText: target.text,
-            authorUsername: target.username,
-            judgeCriteria: settings?.judge_criteria ?? null,
-            replyTone: settings?.reply_tone ?? null,
-            userTopics: profile.topics ?? null,
-            userForbiddenTopics: profile.forbidden_topics ?? null,
-            targetPersona: targetPersona || null,
-            templates: commentTemplates,
-          });
-        } else {
-          judged = await judgeAndDraftComment(openai, {
-            postText: target.text,
-            authorUsername: target.username,
-            judgeCriteria: settings?.judge_criteria ?? null,
-            replyTone: settings?.reply_tone ?? null,
-            userTopics: profile.topics ?? null,
-            userForbiddenTopics: profile.forbidden_topics ?? null,
-            targetPersona: targetPersona || null,
-          });
-        }
-      } catch (aiError) {
-        console.error("judgeAndDraftComment error:", aiError);
-        judged = {
-          shouldReply: false,
-          reason: "AI判定中にエラーが発生しました。",
-          comment: null,
-        };
-      }
-
-      let status: "pending" | "rejected" | "posted" | "failed" = judged.shouldReply
-        ? "pending"
-        : "rejected";
-      let replyPostId: string | null = null;
-      let errorMessage: string | null = null;
-
-      if (judged.shouldReply && autoPost && judged.comment) {
-        try {
-          replyPostId = await postReplyToThreads(
-            profile.threads_user_id,
-            profile.threads_access_token,
-            target.id,
-            judged.comment
-          );
-          status = "posted";
-        } catch (postError) {
-          console.error("auto post reply error:", postError);
-          status = "failed";
-          errorMessage =
-            postError instanceof Error ? postError.message : "投稿に失敗しました。";
-        }
-      }
-
-      const { data: saved, error: insertError } = await supabase
-        .from("engagement_candidates")
-        .insert({
-          user_id: user.id,
-          keyword: target.keyword,
-          threads_post_id: target.id,
-          author_username: target.username,
-          post_text: target.text,
-          permalink: target.permalink,
-          post_created_at: target.timestamp,
-          judge_passed: judged.shouldReply,
-          judge_reason: judged.reason,
-          comment_draft: judged.comment,
-          status,
-          reply_post_id: replyPostId,
-          error_message: errorMessage,
-        })
-        .select()
-        .single();
-
-      if (insertError) {
-        // unique制約違反（同時実行などでの重複）は無視して続行
-        if (insertError.code !== "23505") {
-          console.error("engagement_candidates insert error:", insertError);
-        }
-        continue;
-      }
-
-      savedCandidates.push(saved);
-    }
-
     return NextResponse.json({
       success: true,
-      searched: targets.length,
-      candidates: savedCandidates,
+      searched: result.searched,
+      candidates: result.candidates,
     });
   } catch (error) {
     console.error("engagement search error:", error);

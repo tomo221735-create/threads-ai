@@ -4,6 +4,7 @@
 // 自動実行cron（/api/threads/engagement/auto-run）の両方から使われる。
 
 import OpenAI from "openai";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // 大きな数値IDがJSON数値としてパースされ精度が失われるのを防ぐため、
 // レスポンスの生テキストから "id":"..." または "id":123... を
@@ -430,4 +431,327 @@ export async function postReplyToThreads(
   }
 
   return String(publishData.id);
+}// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Row = any;
+
+export type RunEngagementParams = {
+  supabase: SupabaseClient;
+  openai: OpenAI;
+  userId: string;
+  profile: Row;
+  settings: Row | null;
+  autoPost: boolean;
+  maxReplies?: number; // 今回の実行で投稿する最大件数（省略時は無制限）
+  adhocKeyword?: string; // 手動お試し用
+  maxKeywords?: number; // 検索に使うキーワード数の上限
+  maxPostAgeHours?: number; // これより古い投稿は対象外
+  skipAuthorDays?: number; // 直近N日以内に返信した投稿者は対象外
+  replyDelayMs?: number; // 返信と返信の間の待機
+  deadline?: number; // Date.now() がこれを超えたら打ち切り
+};
+
+export type RunEngagementResult =
+  | {
+      ok: true;
+      searched: number;
+      candidates: Row[];
+      postedCount: number;
+      message?: string;
+      lastError?: string;
+    }
+  | { ok: false; status: number; error: string };
+
+// 「検索 → AI判定 → 保存 → （必要なら）投稿」を1ユーザー分実行する。
+// 手動ボタン（search route）と自動実行（auto-run route）の両方から使う。
+export async function runEngagementForUser(
+  p: RunEngagementParams
+): Promise<RunEngagementResult> {
+  const { supabase, openai, userId, profile, settings, autoPost } = p;
+  const maxReplies = p.maxReplies ?? Number.POSITIVE_INFINITY;
+
+  const manualKeywords: string[] = settings?.keywords ?? [];
+  const targetPersona: string = settings?.target_persona ?? "";
+  const commentMode: "ai" | "template" =
+    settings?.comment_mode === "template" ? "template" : "ai";
+  const commentTemplates: string[] = settings?.comment_templates ?? [];
+
+  if (commentMode === "template" && commentTemplates.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        "定型文モードが選択されていますが、定型文が1件も登録されていません。設定画面で定型文を登録してください。",
+    };
+  }
+
+  // ---- キーワード決定 ----
+  let keywords: string[] = [];
+
+  if (p.adhocKeyword) {
+    keywords = [p.adhocKeyword];
+  } else {
+    let personaKeywords: string[] = [];
+
+    if (targetPersona) {
+      try {
+        personaKeywords = await expandPersonaToKeywords(openai, targetPersona);
+      } catch (e) {
+        console.error("expandPersonaToKeywords error:", e);
+      }
+    }
+
+    keywords = Array.from(new Set([...personaKeywords, ...manualKeywords]));
+  }
+
+  if (p.maxKeywords) keywords = keywords.slice(0, p.maxKeywords);
+
+  if (keywords.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        "検索条件が設定されていません。設定画面で「探している投稿者像」またはキーワードを登録してください。",
+    };
+  }
+
+  const searchType: "TOP" | "RECENT" = settings?.search_type ?? "RECENT";
+  const excludeAuthors: string[] = (settings?.exclude_authors ?? []).map(
+    (a: string) => a.toLowerCase()
+  );
+  const maxCandidates: number = settings?.max_candidates_per_run ?? 10;
+
+  // ---- 重複回避用データ ----
+  const { data: existing } = await supabase
+    .from("engagement_candidates")
+    .select("threads_post_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1000);
+
+  const existingIds = new Set(
+    (existing ?? []).map((r: { threads_post_id: string }) => r.threads_post_id)
+  );
+
+  const recentAuthors = new Set<string>();
+
+  if (p.skipAuthorDays) {
+    const since = new Date(
+      Date.now() - p.skipAuthorDays * 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const { data: postedRows } = await supabase
+      .from("engagement_candidates")
+      .select("author_username")
+      .eq("user_id", userId)
+      .eq("status", "posted")
+      .gte("created_at", since);
+
+    for (const r of postedRows ?? []) {
+      if (r.author_username) {
+        recentAuthors.add(String(r.author_username).toLowerCase());
+      }
+    }
+  }
+
+  const ownUsername = (profile.threads_username ?? "").toLowerCase();
+
+  // ---- 検索 ----
+  const rawCandidates: {
+    keyword: string;
+    id: string;
+    text: string;
+    permalink: string | null;
+    timestamp: string | null;
+    username: string | null;
+  }[] = [];
+
+  for (const keyword of keywords) {
+    try {
+      const results = await searchThreadsPosts(
+        profile.threads_access_token,
+        keyword,
+        searchType,
+        Math.min(maxCandidates * 3, 50)
+      );
+
+      for (const post of results) {
+        const username = (post.username ?? "").toLowerCase();
+
+        if (!post.text) continue;
+        if (post.is_reply) continue;
+        if (existingIds.has(post.id)) continue;
+        if (username && username === ownUsername) continue;
+        if (username && excludeAuthors.includes(username)) continue;
+        if (username && recentAuthors.has(username)) continue;
+
+        if (p.maxPostAgeHours && post.timestamp) {
+          const ageMs = Date.now() - new Date(post.timestamp).getTime();
+          if (ageMs > p.maxPostAgeHours * 60 * 60 * 1000) continue;
+        }
+
+        rawCandidates.push({
+          keyword,
+          id: post.id,
+          text: post.text,
+          permalink: post.permalink,
+          timestamp: post.timestamp,
+          username: post.username,
+        });
+
+        existingIds.add(post.id);
+        // 同じ実行内で同じ人に複数返信しない
+        if (p.skipAuthorDays && username) recentAuthors.add(username);
+      }
+    } catch (searchError) {
+      console.error(`keyword_search error (${keyword}):`, searchError);
+    }
+  }
+
+  const targets = rawCandidates.slice(0, maxCandidates);
+
+  if (targets.length === 0) {
+    return {
+      ok: true,
+      searched: 0,
+      candidates: [],
+      postedCount: 0,
+      message:
+        "条件に合う新しい投稿が見つかりませんでした。キーワードや除外設定を見直してみてください。",
+    };
+  }
+
+  // ---- 判定 → 保存 → 投稿 ----
+  const saved: Row[] = [];
+  let postedCount = 0;
+  let consecutiveFailures = 0;
+  let lastError: string | undefined;
+
+  for (const target of targets) {
+    if (p.deadline && Date.now() > p.deadline) break;
+    if (autoPost && postedCount >= maxReplies) break; // 残りは次回以降に回す
+    if (autoPost && consecutiveFailures >= 2) break; // 連続失敗時は中断
+
+    let judged: JudgeAndDraftResult;
+
+    try {
+      if (commentMode === "template") {
+        judged = await judgeAndSelectTemplate(openai, {
+          postText: target.text,
+          authorUsername: target.username,
+          judgeCriteria: settings?.judge_criteria ?? null,
+          replyTone: settings?.reply_tone ?? null,
+          userTopics: profile.topics ?? null,
+          userForbiddenTopics: profile.forbidden_topics ?? null,
+          targetPersona: targetPersona || null,
+          templates: commentTemplates,
+        });
+      } else {
+        judged = await judgeAndDraftComment(openai, {
+          postText: target.text,
+          authorUsername: target.username,
+          judgeCriteria: settings?.judge_criteria ?? null,
+          replyTone: settings?.reply_tone ?? null,
+          userTopics: profile.topics ?? null,
+          userForbiddenTopics: profile.forbidden_topics ?? null,
+          targetPersona: targetPersona || null,
+        });
+      }
+    } catch (aiError) {
+      console.error("judge error:", aiError);
+      judged = {
+        shouldReply: false,
+        reason: "AI判定中にエラーが発生しました。",
+        comment: null,
+      };
+    }
+
+    // ★ 先にDBへ保存する（unique制約が「処理済みロック」になる）
+    const { data: row, error: insertError } = await supabase
+      .from("engagement_candidates")
+      .insert({
+        user_id: userId,
+        keyword: target.keyword,
+        threads_post_id: target.id,
+        author_username: target.username,
+        post_text: target.text,
+        permalink: target.permalink,
+        post_created_at: target.timestamp,
+        judge_passed: judged.shouldReply,
+        judge_reason: judged.reason,
+        comment_draft: judged.comment,
+        status: judged.shouldReply ? "pending" : "rejected",
+      })
+      .select()
+      .single();
+
+    if (insertError || !row) {
+      // 23505 = 別の実行がすでに処理済み。投稿せずに次へ
+      if (insertError?.code !== "23505") {
+        console.error("engagement_candidates insert error:", insertError);
+      }
+      continue;
+    }
+
+    let result: Row = row;
+
+    if (judged.shouldReply && autoPost && judged.comment) {
+      try {
+        const replyPostId = await postReplyToThreads(
+          profile.threads_user_id,
+          profile.threads_access_token,
+          target.id,
+          judged.comment
+        );
+
+        const { data: updated } = await supabase
+          .from("engagement_candidates")
+          .update({
+            status: "posted",
+            reply_post_id: replyPostId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", row.id)
+          .select()
+          .single();
+
+        result = updated ?? { ...row, status: "posted", reply_post_id: replyPostId };
+        postedCount++;
+        consecutiveFailures = 0;
+
+        if (p.replyDelayMs && postedCount < maxReplies) {
+          await sleep(p.replyDelayMs);
+        }
+      } catch (postError) {
+        console.error("auto post reply error:", postError);
+        const message =
+          postError instanceof Error ? postError.message : "投稿に失敗しました。";
+
+        lastError = message;
+        consecutiveFailures++;
+
+        const { data: updated } = await supabase
+          .from("engagement_candidates")
+          .update({
+            status: "failed",
+            error_message: message,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", row.id)
+          .select()
+          .single();
+
+        result = updated ?? { ...row, status: "failed", error_message: message };
+      }
+    }
+
+    saved.push(result);
+  }
+
+  return {
+    ok: true,
+    searched: targets.length,
+    candidates: saved,
+    postedCount,
+    lastError,
+  };
 }
