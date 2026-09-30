@@ -488,14 +488,14 @@ export default function EngagementPage() {
               </p>
 
 {c.permalink && (
-  <a
+   <a
     href={c.permalink}
     target="_blank"
     rel="noreferrer"
     className="text-xs text-accent-cyan hover:underline"
   >
     投稿を見る →
-  </a>
+     </a>
 )}
 
               {c.judge_reason && (
