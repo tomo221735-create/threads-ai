@@ -14,7 +14,6 @@ const DEFAULT_SETTINGS = {
   target_persona: "",
   comment_mode: "ai" as "ai" | "template",
   comment_templates: [] as string[],
-    comment_templates: [] as string[],
   max_replies_per_day: 10,
   max_replies_per_run: 3,
 };

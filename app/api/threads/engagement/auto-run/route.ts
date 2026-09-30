@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { requirePlan } from "@/lib/plan-guard";
 import { runEngagementForUser } from "@/lib/threads-engagement";
-
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 // Vercelのプラン上限を超えると怒られるので、その場合は 60 などに下げる
 export const maxDuration = 300;
 
@@ -13,7 +13,7 @@ const DEFAULT_PER_RUN = 3;
 const DEFAULT_PER_DAY = 10;
 
 async function markRun(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   error: string | null
 ) {
