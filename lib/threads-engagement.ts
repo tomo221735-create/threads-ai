@@ -48,27 +48,44 @@ export async function searchThreadsPosts(
     `&limit=${Math.min(Math.max(limit, 1), 100)}` +
     `&access_token=${encodeURIComponent(accessToken)}`;
 
-  // code 1 / 2 は一時的なMeta側エラーのことがあるので、1回だけ再試行する
+  // 一時的なエラー（code 1/2、HTTP 429/5xx、空レスポンス）は1回だけ再試行する
   for (let attempt = 0; attempt < 2; attempt++) {
     const response = await fetch(url, { cache: "no-store" });
-    const data = await response.json();
+    const rawText = await response.text();
 
-    if (response.ok) {
-      return (data?.data ?? []) as ThreadsSearchResult[];
+    let data: {
+      data?: ThreadsSearchResult[];
+      error?: { message?: string; code?: number; error_subcode?: number };
+    } | null = null;
+
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      data = null;
     }
 
-    const code: number | undefined = data?.error?.code;
-    const subcode: number | undefined = data?.error?.error_subcode;
-    const retryable = code === 1 || code === 2;
+    if (response.ok && data) {
+      return data.data ?? [];
+    }
+
+    const code = data?.error?.code;
+    const subcode = data?.error?.error_subcode;
+    const retryable =
+      code === 1 ||
+      code === 2 ||
+      response.status === 429 ||
+      response.status >= 500 ||
+      !data;
 
     if (retryable && attempt === 0) {
       await sleep(2000);
       continue;
     }
 
+    const traceId = response.headers.get("x-fb-trace-id") ?? "-";
     const err = new Error(
       `${data?.error?.message || "Threads投稿の検索に失敗しました。"}` +
-        ` (code=${code ?? "?"}, subcode=${subcode ?? "-"}, q="${q}")`
+        ` (http=${response.status}, code=${code ?? "?"}, subcode=${subcode ?? "-"}, trace=${traceId}, q="${q}", body="${rawText.slice(0, 200)}")`
     ) as Error & { code?: number };
     err.code = code;
     throw err;
@@ -609,6 +626,9 @@ export async function runEngagementForUser(
   let lastSearchError = "";
 
   for (const keyword of keywords) {
+    // 連続リクエストによる制限を避けるため、少し間隔をあける
+    if (keyword !== keywords[0]) await sleep(500);
+
     try {
       const results = await searchThreadsPosts(
         profile.threads_access_token,
