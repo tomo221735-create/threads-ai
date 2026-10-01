@@ -37,26 +37,44 @@ export async function searchThreadsPosts(
   searchType: "TOP" | "RECENT",
   limit: number
 ): Promise<ThreadsSearchResult[]> {
+  // 全角スペースや連続スペースを半角1つにそろえる
+  const q = keyword.replace(/\u3000/g, " ").replace(/\s+/g, " ").trim();
+
   const url =
     `https://graph.threads.net/v1.0/keyword_search` +
-    `?q=${encodeURIComponent(keyword)}` +
+    `?q=${encodeURIComponent(q)}` +
     `&search_type=${searchType}` +
     `&fields=id,text,permalink,timestamp,username,is_reply` +
     `&limit=${Math.min(Math.max(limit, 1), 100)}` +
     `&access_token=${encodeURIComponent(accessToken)}`;
 
-  const response = await fetch(url, { cache: "no-store" });
-  const data = await response.json();
+  // code 1 / 2 は一時的なMeta側エラーのことがあるので、1回だけ再試行する
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await fetch(url, { cache: "no-store" });
+    const data = await response.json();
 
-  if (!response.ok) {
+    if (response.ok) {
+      return (data?.data ?? []) as ThreadsSearchResult[];
+    }
+
+    const code: number | undefined = data?.error?.code;
+    const subcode: number | undefined = data?.error?.error_subcode;
+    const retryable = code === 1 || code === 2;
+
+    if (retryable && attempt === 0) {
+      await sleep(2000);
+      continue;
+    }
+
     const err = new Error(
-      data?.error?.message || "Threads投稿の検索に失敗しました。"
+      `${data?.error?.message || "Threads投稿の検索に失敗しました。"}` +
+        ` (code=${code ?? "?"}, subcode=${subcode ?? "-"}, q="${q}")`
     ) as Error & { code?: number };
-    err.code = data?.error?.code;
+    err.code = code;
     throw err;
   }
 
-  return (data?.data ?? []) as ThreadsSearchResult[];
+  return [];
 }
 
 export type JudgeAndDraftInput = {
@@ -587,6 +605,9 @@ export async function runEngagementForUser(
     username: string | null;
   }[] = [];
 
+  let searchFailures = 0;
+  let lastSearchError = "";
+
   for (const keyword of keywords) {
     try {
       const results = await searchThreadsPosts(
@@ -626,6 +647,9 @@ export async function runEngagementForUser(
       }
     } catch (searchError) {
       console.error(`keyword_search error (${keyword}):`, searchError);
+      searchFailures++;
+      lastSearchError =
+        searchError instanceof Error ? searchError.message : String(searchError);
     }
   }
 
@@ -639,6 +663,10 @@ export async function runEngagementForUser(
       postedCount: 0,
       message:
         "条件に合う新しい投稿が見つかりませんでした。キーワードや除外設定を見直してみてください。",
+      lastError:
+        searchFailures > 0
+          ? `検索エラー（${searchFailures}/${keywords.length}件）: ${lastSearchError}`
+          : undefined,
     };
   }
 
